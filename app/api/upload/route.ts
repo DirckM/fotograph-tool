@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   const path = `${user.id}/${Date.now()}.${ext}`;
 
   const { error } = await supabase.storage
-    .from("uploads")
+    .from("project-assets")
     .upload(path, file, {
       contentType: file.type,
       upsert: false,
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   }
 
   const { data: { publicUrl } } = supabase.storage
-    .from("uploads")
+    .from("project-assets")
     .getPublicUrl(path);
 
   return NextResponse.json({ path, publicUrl });

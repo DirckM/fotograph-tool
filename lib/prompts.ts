@@ -96,3 +96,105 @@ Requirements:
 - The character must be immediately recognizable as the same person
 - Apply the described scene naturally while keeping character identity intact`;
 }
+
+export function modelGenerationPrompt(
+  description: string,
+  hasMoodboard: boolean
+): string {
+  const moodboardInstruction = hasMoodboard
+    ? "Use the provided reference/moodboard images as visual inspiration for the model's appearance. Synthesize the best qualities from the references into a single coherent identity."
+    : "";
+
+  return `Generate a photorealistic portrait of a fashion model with the following description:
+
+${description}
+
+${moodboardInstruction}
+
+Requirements:
+- The result must be a single, consistent human identity
+- Photorealistic quality suitable for professional fashion photography
+- Clean, well-lit studio portrait style
+- Sharp facial features with natural skin texture
+- Neutral expression suitable for fashion work
+- The model should appear natural and believable, not AI-generated`;
+}
+
+export function environmentGenerationPrompt(
+  description: string,
+  hasMoodboard: boolean
+): string {
+  const moodboardInstruction = hasMoodboard
+    ? "Use the provided reference images as visual inspiration. Combine the best elements from the references into a single coherent environment."
+    : "";
+
+  return `Generate a photorealistic environment/setting for a professional photoshoot:
+
+${description}
+
+${moodboardInstruction}
+
+Requirements:
+- Photorealistic quality with natural lighting
+- High resolution with fine detail in textures and materials
+- Suitable as a photography backdrop
+- Coherent perspective and depth
+- Natural shadows and ambient occlusion`;
+}
+
+export function poseGenerationPrompt(
+  description: string,
+  hasMoodboard: boolean
+): string {
+  const moodboardInstruction = hasMoodboard
+    ? "Use the provided reference images as visual inspiration for the pose."
+    : "";
+
+  return `Generate a black and white silhouette/pose reference showing:
+
+${description}
+
+${moodboardInstruction}
+
+Requirements:
+- Clean black silhouette on white background
+- Clear body pose with visible limbs and joints
+- Natural, anatomically correct pose
+- Fashion/editorial style posing
+- Full body visible from head to toe`;
+}
+
+export function finalCompositePrompt(
+  projectDescription: string
+): string {
+  return `Create a photorealistic composite fashion photograph using all the provided reference images.
+
+The images provided are (in order):
+1. Model face reference(s)
+2. Environment/setting
+3. Pose reference (silhouette)
+4. Garment/clothing reference(s)
+
+Project context: ${projectDescription}
+
+Requirements:
+- Place the model in the environment following the pose reference
+- Dress the model in the provided garment(s)
+- Match lighting between the model and environment naturally
+- Cast realistic shadows
+- Maintain the model's exact facial identity from the references
+- The garment should drape naturally on the posed body
+- The final result must look like a real professional photograph
+- Perspective alignment between all elements must be seamless`;
+}
+
+export function searchQuerySuggestionPrompt(
+  projectDescription: string
+): string {
+  return `Based on the following project description for a fashion photoshoot, suggest 2-3 short Pinterest search queries that would help find relevant visual references (moodboard images).
+
+Project description:
+${projectDescription}
+
+Return only the search queries, one per line. Keep each query under 5 words. Focus on the most distinctive visual elements described.`;
+}

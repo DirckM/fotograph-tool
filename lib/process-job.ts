@@ -9,6 +9,9 @@ interface ProcessJobParams {
   imagePaths: string[];
   prompt: string;
   inputParams?: Record<string, unknown>;
+  projectId?: string;
+  stage?: number;
+  model?: string;
 }
 
 export async function processJob({
@@ -17,6 +20,9 @@ export async function processJob({
   imagePaths,
   prompt,
   inputParams = {},
+  projectId,
+  stage,
+  model,
 }: ProcessJobParams) {
   const supabase = createAdminClient();
 
@@ -28,6 +34,8 @@ export async function processJob({
       status: "processing",
       input_images: imagePaths,
       input_params: inputParams,
+      project_id: projectId ?? null,
+      stage: stage ?? null,
     })
     .select()
     .single();
@@ -43,14 +51,19 @@ export async function processJob({
         let buffer: Buffer;
         let mimeType: string;
 
-        if (path.startsWith("https://") || path.startsWith("http://")) {
+        if (path.startsWith("data:")) {
+          const match = path.match(/^data:([^;]+);base64,(.+)$/);
+          if (!match) throw new Error("Invalid data URL");
+          mimeType = match[1];
+          buffer = Buffer.from(match[2], "base64");
+        } else if (path.startsWith("https://") || path.startsWith("http://")) {
           const res = await fetch(path);
           if (!res.ok) throw new Error(`Failed to fetch image: ${path}`);
           buffer = Buffer.from(await res.arrayBuffer());
           mimeType = res.headers.get("content-type") || "image/png";
         } else {
           const { data, error } = await supabase.storage
-            .from("uploads")
+            .from("project-assets")
             .download(path);
 
           if (error || !data) {
@@ -68,7 +81,7 @@ export async function processJob({
       })
     );
 
-    const result = await generateWithImages(images, prompt);
+    const result = await generateWithImages(images, prompt, model);
 
     if (!result) {
       throw new Error("No image generated");

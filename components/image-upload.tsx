@@ -50,7 +50,7 @@ export function ImageUpload({
 
   if (preview) {
     return (
-      <div className={cn("relative max-h-80 overflow-hidden rounded-lg border border-border", className)}>
+      <div className={cn("relative overflow-hidden rounded-lg border border-border", className)}>
         <img
           src={preview}
           alt="Upload preview"
@@ -73,7 +73,7 @@ export function ImageUpload({
   return (
     <label
       className={cn(
-        "flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border transition-colors",
+        "flex h-full cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border transition-colors",
         isDragging && "border-primary bg-primary/5",
         !isDragging && "hover:border-muted-foreground/50 hover:bg-muted/50",
         className

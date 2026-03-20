@@ -204,7 +204,7 @@ export default function FaceSwapPage() {
   const allSourcesUploaded = sourceImages.length > 0 && sourceImages.every((img) => img.path);
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full flex-col gap-3">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-medium">
           <Users className="h-5 w-5" />
@@ -215,8 +215,9 @@ export default function FaceSwapPage() {
         </p>
       </div>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[1fr,320px]">
-        <div className="space-y-3">
+      <div className="grid flex-1 min-h-0 items-stretch gap-4 lg:grid-cols-[1fr,280px]">
+        {/* Yellow: image upload fills available height */}
+        <div className="flex flex-col gap-2 min-h-0">
           {resultUrl && targetPreview ? (
             <ResultViewer originalUrl={targetPreview} resultUrl={resultUrl} />
           ) : (
@@ -226,17 +227,19 @@ export default function FaceSwapPage() {
               preview={targetPreview}
               label="Upload target photo"
               description="The photo where the face will be replaced"
-              className="min-h-64"
+              className="flex-1 min-h-0"
             />
           )}
+          {/* Blue: job status below upload */}
           <JobStatus jobId={jobId} onComplete={handleJobComplete} />
         </div>
 
-        <div className="space-y-4 rounded-lg border border-border p-5">
+        {/* Red: all configuration in sidebar, scrollable if needed */}
+        <div className="flex flex-col gap-3 overflow-y-auto rounded-lg border border-border p-3">
           {/* Source face section */}
           <div>
-            <Label className="mb-2 block text-sm font-medium">Source Face</Label>
-            <div className="mb-3 flex rounded-md border border-border text-sm">
+            <Label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-muted-foreground">Source Face</Label>
+            <div className="mb-2 flex rounded-md border border-border text-sm">
               <button
                 className={cn(
                   "flex-1 rounded-l-md px-3 py-1.5 font-medium transition-colors",

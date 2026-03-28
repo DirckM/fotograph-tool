@@ -51,6 +51,7 @@ export async function POST(
       feature,
       imagePaths: combinedPaths,
       prompt: refinementPrompt,
+      inputParams: { userPrompt: prompt, maskPath },
       projectId,
       stage: stageNum,
     });

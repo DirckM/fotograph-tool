@@ -1,41 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import {
-  ArrowRight,
-  Loader2,
-  Sparkles,
-  User,
-  RotateCw,
-  CheckCircle2,
-} from "lucide-react";
+import Image from "next/image";
+import { ArrowRight, Loader2, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { ImageUpload } from "@/components/image-upload";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { JobStatus } from "@/components/job-status";
-import { MoodboardSearch } from "@/components/projects/moodboard-search";
-import { MoodboardGrid } from "@/components/projects/moodboard-grid";
-import { RefinementPanel } from "@/components/projects/refinement-panel";
-import { AssetGrid } from "@/components/projects/asset-grid";
+import { MoodboardBrowser } from "@/components/projects/moodboard-browser";
+import { MoodboardStrip } from "@/components/projects/moodboard-strip";
 import { StageGate } from "@/components/projects/stage-gate";
+import { HelpChat } from "@/components/help-chat";
 import { useFileUpload } from "@/lib/hooks";
 import type { Project, ProjectAsset, Job } from "@/types";
-
-const ANGLE_SET = [
-  { angle: "front", label: "Front" },
-  { angle: "front three-quarter left", label: "3/4 Left" },
-  { angle: "front three-quarter right", label: "3/4 Right" },
-  { angle: "left profile", label: "Profile Left" },
-  { angle: "right profile", label: "Profile Right" },
-];
 
 export default function ModelPage() {
   const params = useParams<{ projectId: string }>();
@@ -45,31 +31,21 @@ export default function ModelPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Section 1: Moodboard
   const [description, setDescription] = useState("");
   const [moodboardAssets, setMoodboardAssets] = useState<ProjectAsset[]>([]);
   const [selectedMoodboardIds, setSelectedMoodboardIds] = useState<Set<string>>(
     new Set()
   );
 
-  // Section 2: Generate face
+  const [notes, setNotes] = useState<Record<string, string>>({});
+
   const [generateJobId, setGenerateJobId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [generatedFace, setGeneratedFace] = useState<ProjectAsset | null>(null);
-
-  // Section 3: Refinement
-  const [refineJobId, setRefineJobId] = useState<string | null>(null);
-  const [refining, setRefining] = useState(false);
   const [refinedFace, setRefinedFace] = useState<ProjectAsset | null>(null);
 
-  // Section 4: Angles
-  const [angleAssets, setAngleAssets] = useState<ProjectAsset[]>([]);
-  const [generatingAngles, setGeneratingAngles] = useState(false);
-  const [angleJobIds, setAngleJobIds] = useState<string[]>([]);
-  const [angleJobsCompleted, setAngleJobsCompleted] = useState(0);
-
-  // Section 5: Approve
-  const [approving, setApproving] = useState(false);
+  const [showNoRefsConfirm, setShowNoRefsConfirm] = useState(false);
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -87,26 +63,24 @@ export default function ModelPage() {
 
         if (assetsRes.ok) {
           const allAssets: ProjectAsset[] = await assetsRes.json();
-
-          setMoodboardAssets(
-            allAssets.filter((a) => a.asset_type === "face_moodboard")
-          );
-
-          const face = allAssets.find(
-            (a) => a.asset_type === "refined_face"
-          );
+          const moodboard = allAssets.filter((a) => a.asset_type === "face_moodboard");
+          setMoodboardAssets(moodboard);
+          const loadedNotes: Record<string, string> = {};
+          const loadedSelected = new Set<string>();
+          for (const a of moodboard) {
+            const meta = a.metadata as Record<string, unknown> | null;
+            if (typeof meta?.note === "string" && meta.note) loadedNotes[a.id] = meta.note;
+            if (meta?.selected === true) loadedSelected.add(a.id);
+          }
+          setNotes(loadedNotes);
+          setSelectedMoodboardIds(loadedSelected);
+          const face = allAssets.find((a) => a.asset_type === "refined_face");
           if (face) {
             setRefinedFace(face);
           } else {
-            const gen = allAssets.find(
-              (a) => a.asset_type === "generated_face"
-            );
+            const gen = allAssets.find((a) => a.asset_type === "generated_face");
             if (gen) setGeneratedFace(gen);
           }
-
-          setAngleAssets(
-            allAssets.filter((a) => a.asset_type === "face_angle")
-          );
         }
       } finally {
         setLoading(false);
@@ -115,24 +89,20 @@ export default function ModelPage() {
     load();
   }, [params.projectId]);
 
-  // -- Section 1 handlers --
+  // -- Moodboard handlers --
 
   const handleAddPinterestImage = useCallback(
     async (imageUrl: string, _description: string) => {
-      const res = await fetch(
-        `/api/projects/${params.projectId}/assets`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            stage: 1,
-            asset_type: "face_moodboard",
-            source: "pinterest",
-            external_url: imageUrl,
-          }),
-        }
-      );
-
+      const res = await fetch(`/api/projects/${params.projectId}/assets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stage: 1,
+          asset_type: "face_moodboard",
+          source: "pinterest",
+          external_url: imageUrl,
+        }),
+      });
       if (res.ok) {
         const asset: ProjectAsset = await res.json();
         setMoodboardAssets((prev) => [...prev, asset]);
@@ -144,21 +114,16 @@ export default function ModelPage() {
   const handleUploadMoodboardImage = useCallback(
     async (file: File) => {
       const result = await upload(file);
-
-      const res = await fetch(
-        `/api/projects/${params.projectId}/assets`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            stage: 1,
-            asset_type: "face_moodboard",
-            source: "upload",
-            storage_path: result.publicUrl,
-          }),
-        }
-      );
-
+      const res = await fetch(`/api/projects/${params.projectId}/assets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stage: 1,
+          asset_type: "face_moodboard",
+          source: "upload",
+          storage_path: result.publicUrl,
+        }),
+      });
       if (res.ok) {
         const asset: ProjectAsset = await res.json();
         setMoodboardAssets((prev) => [...prev, asset]);
@@ -167,17 +132,22 @@ export default function ModelPage() {
     [upload, params.projectId]
   );
 
-  const handleToggleMoodboardSelect = useCallback((id: string) => {
-    setSelectedMoodboardIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  }, []);
+  const handleToggleMoodboardSelect = useCallback(
+    (id: string) => {
+      setSelectedMoodboardIds((prev) => {
+        const next = new Set(prev);
+        const nowSelected = !next.has(id);
+        nowSelected ? next.add(id) : next.delete(id);
+        fetch(`/api/projects/${params.projectId}/assets/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ metadata: { note: notes[id] ?? "", selected: nowSelected } }),
+        });
+        return next;
+      });
+    },
+    [params.projectId, notes]
+  );
 
   const handleRemoveMoodboardImage = useCallback(
     async (id: string) => {
@@ -197,7 +167,24 @@ export default function ModelPage() {
     [params.projectId]
   );
 
-  // -- Section 2 handlers --
+  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const handleNoteChange = useCallback(
+    (id: string, note: string) => {
+      setNotes((prev) => ({ ...prev, [id]: note }));
+      clearTimeout(saveTimers.current[id]);
+      saveTimers.current[id] = setTimeout(() => {
+        fetch(`/api/projects/${params.projectId}/assets/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ metadata: { note, selected: selectedMoodboardIds.has(id) } }),
+        });
+      }, 600);
+    },
+    [params.projectId, selectedMoodboardIds]
+  );
+
+  // -- Face generation --
 
   const getSelectedImageUrls = useCallback((): string[] => {
     return moodboardAssets
@@ -205,6 +192,13 @@ export default function ModelPage() {
       .map((a) => a.external_url ?? a.storage_path ?? "")
       .filter(Boolean);
   }, [moodboardAssets, selectedMoodboardIds]);
+
+  const getSelectedImageNotes = useCallback((): string => {
+    return moodboardAssets
+      .filter((a) => selectedMoodboardIds.has(a.id) && notes[a.id])
+      .map((a) => `- ${notes[a.id]}`)
+      .join("\n");
+  }, [moodboardAssets, selectedMoodboardIds, notes]);
 
   const handleGenerateFace = useCallback(async () => {
     setGenerating(true);
@@ -217,6 +211,7 @@ export default function ModelPage() {
           body: JSON.stringify({
             prompt: description,
             imagePaths: getSelectedImageUrls(),
+            referenceNotes: getSelectedImageNotes(),
           }),
         }
       );
@@ -235,184 +230,40 @@ export default function ModelPage() {
     async (job: Job) => {
       setGenerating(false);
       setGenerateJobId(null);
-
       if (job.result_image) {
-        const res = await fetch(
-          `/api/projects/${params.projectId}/assets`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              stage: 1,
-              asset_type: "generated_face",
-              source: "gemini",
-              storage_path: job.result_image,
-            }),
-          }
-        );
+        const res = await fetch(`/api/projects/${params.projectId}/assets`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            stage: 1,
+            asset_type: "generated_face",
+            source: "gemini",
+            storage_path: job.result_image,
+          }),
+        });
         if (res.ok) {
           const asset: ProjectAsset = await res.json();
           setGeneratedFace(asset);
+          setRefinedFace(null);
         }
       }
     },
     [params.projectId]
   );
 
-  // -- Section 3 handlers --
+  // -- Derived --
 
+  const faceGenerated = !!(generatedFace || refinedFace);
   const currentFaceUrl =
     (refinedFace?.storage_path ?? refinedFace?.external_url) ??
     (generatedFace?.storage_path ?? generatedFace?.external_url);
 
-  const handleRefine = useCallback(
-    async (data: {
-      prompt: string;
-      maskDataUrl: string;
-      referenceImagePaths?: string[];
-    }) => {
-      if (!currentFaceUrl) return;
-      setRefining(true);
-      try {
-        const res = await fetch(
-          `/api/projects/${params.projectId}/stage/1/mask-refine`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              prompt: data.prompt,
-              maskPath: data.maskDataUrl,
-              imagePaths: [
-                currentFaceUrl,
-                ...(data.referenceImagePaths ?? []),
-              ],
-            }),
-          }
-        );
-        if (res.ok) {
-          const job: Job = await res.json();
-          setRefineJobId(job.id);
-        } else {
-          setRefining(false);
-        }
-      } catch {
-        setRefining(false);
-      }
-    },
-    [params.projectId, currentFaceUrl]
-  );
-
-  const handleRefineComplete = useCallback(
-    async (job: Job) => {
-      setRefining(false);
-      setRefineJobId(null);
-
-      if (job.result_image) {
-        const res = await fetch(
-          `/api/projects/${params.projectId}/assets`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              stage: 1,
-              asset_type: "refined_face",
-              source: "gemini",
-              storage_path: job.result_image,
-            }),
-          }
-        );
-        if (res.ok) {
-          const asset: ProjectAsset = await res.json();
-          setRefinedFace(asset);
-        }
-      }
-    },
-    [params.projectId]
-  );
-
-  // -- Section 4 handlers --
-
-  const finalFaceUrl = currentFaceUrl;
-  const hasFinalFace = !!(generatedFace || refinedFace);
-
-  const handleGenerateAngles = useCallback(async () => {
-    if (!finalFaceUrl) return;
-    setGeneratingAngles(true);
-    setAngleJobsCompleted(0);
-
-    const jobIds: string[] = [];
-
-    for (const { angle } of ANGLE_SET) {
-      try {
-        const res = await fetch("/api/generate-perspective", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            imagePath: finalFaceUrl,
-            angle,
-          }),
-        });
-        if (res.ok) {
-          const job: Job = await res.json();
-          jobIds.push(job.id);
-        }
-      } catch {
-        // continue with remaining angles
-      }
-    }
-
-    setAngleJobIds(jobIds);
-  }, [finalFaceUrl]);
-
-  const handleAngleJobComplete = useCallback(
-    async (job: Job) => {
-      setAngleJobsCompleted((prev) => {
-        const next = prev + 1;
-        if (next >= angleJobIds.length) {
-          setGeneratingAngles(false);
-        }
-        return next;
-      });
-
-      if (job.result_image) {
-        const res = await fetch(
-          `/api/projects/${params.projectId}/assets`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              stage: 1,
-              asset_type: "face_angle",
-              source: "gemini",
-              storage_path: job.result_image,
-            }),
-          }
-        );
-        if (res.ok) {
-          const asset: ProjectAsset = await res.json();
-          setAngleAssets((prev) => [...prev, asset]);
-        }
-      }
-    },
-    [params.projectId, angleJobIds.length]
-  );
-
-  // -- Section 5 handlers --
-
-  const handleApprove = useCallback(async () => {
-    setApproving(true);
-    try {
-      await fetch(
-        `/api/projects/${params.projectId}/stage/1/approve`,
-        { method: "POST" }
-      );
-      router.push(
-        `/dashboard/projects/${params.projectId}/environment`
-      );
-    } finally {
-      setApproving(false);
-    }
-  }, [params.projectId, router]);
+  const moodboardGridImages = moodboardAssets.map((a) => ({
+    id: a.id,
+    url: a.external_url ?? a.storage_path ?? "",
+    selected: selectedMoodboardIds.has(a.id),
+    note: notes[a.id] ?? "",
+  }));
 
   if (loading || !project) {
     return (
@@ -422,39 +273,23 @@ export default function ModelPage() {
     );
   }
 
-  const moodboardGridImages = moodboardAssets.map((a) => ({
-    id: a.id,
-    url: a.external_url ?? a.storage_path ?? "",
-    selected: selectedMoodboardIds.has(a.id),
-  }));
-
-  const moodboardReferenceImages = moodboardAssets.map((a) => ({
-    id: a.id,
-    url: a.external_url ?? a.storage_path ?? "",
-  }));
-
   return (
     <StageGate currentStage={project.current_stage} requiredStage={1}>
-      <div className="space-y-8">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">
-            Stage 1: Model Generation
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Create a virtual model face, refine it, and generate multiple
-            angles for consistency.
-          </p>
-        </div>
+      <div className="flex h-full overflow-hidden">
+        <div className="flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-3xl space-y-6 px-6 py-4">
+            {/* Title */}
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">
+                Stage 1: <span className="font-serif italic">Model</span>{" "}
+                Generation
+              </h2>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Describe your model, add reference images, and generate a face.
+              </p>
+            </div>
 
-        {/* Section 1: Face Moodboard */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <User className="h-4 w-4" />
-              Face Moodboard
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
+            {/* Description */}
             <div className="space-y-2">
               <Label htmlFor="model-description">Model Description</Label>
               <Textarea
@@ -467,67 +302,168 @@ export default function ModelPage() {
               />
             </div>
 
-            <MoodboardSearch
-              onAddImage={handleAddPinterestImage}
-              projectDescription={description || undefined}
-            />
+            {/* Moodboard */}
+            <MoodboardStrip images={moodboardGridImages} />
 
-            <div className="space-y-2">
-              <Label>Upload Reference Images</Label>
-              <ImageUpload
-                onUpload={handleUploadMoodboardImage}
-                label="Upload face reference"
-                description="Add your own reference photos"
-                className="min-h-28"
-              />
-            </div>
-
-            <MoodboardGrid
+            <MoodboardBrowser
               images={moodboardGridImages}
+              onAddFromPinterest={handleAddPinterestImage}
+              onUpload={handleUploadMoodboardImage}
               onToggleSelect={handleToggleMoodboardSelect}
               onRemove={handleRemoveMoodboardImage}
+              onNoteChange={handleNoteChange}
+              projectDescription={description || undefined}
+              uploading={uploading}
             />
 
+            {/* Selected references with notes */}
             {selectedMoodboardIds.size > 0 && (
-              <p className="text-sm text-muted-foreground">
-                {selectedMoodboardIds.size} image
-                {selectedMoodboardIds.size !== 1 ? "s" : ""} selected as
-                reference for generation
-              </p>
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-muted-foreground">
+                  {selectedMoodboardIds.size} reference
+                  {selectedMoodboardIds.size !== 1 ? "s" : ""} selected
+                </p>
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  {moodboardAssets
+                    .filter((a) => selectedMoodboardIds.has(a.id))
+                    .map((a) => {
+                      const url = a.external_url ?? a.storage_path ?? "";
+                      return (
+                        <div key={a.id} className="space-y-2">
+                          <div className="relative overflow-hidden rounded-lg border-2 border-blue-500 ring-2 ring-blue-500/20">
+                            <img
+                              src={url}
+                              alt="Selected reference"
+                              className="aspect-square w-full object-cover"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleToggleMoodboardSelect(a.id)}
+                              className="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full border-2 border-blue-500 bg-blue-500 text-white transition-colors hover:bg-blue-600"
+                            >
+                              <X className="size-3.5" />
+                            </button>
+                          </div>
+                          <input
+                            type="text"
+                            value={notes[a.id] ?? ""}
+                            onChange={(e) =>
+                              handleNoteChange(a.id, e.target.value)
+                            }
+                            placeholder="What do you like? e.g. &quot;the freckles&quot;"
+                            className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500/30"
+                          />
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
             )}
-          </CardContent>
-        </Card>
 
-        {/* Section 2: Generate Face */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Sparkles className="h-4 w-4" />
-              Generate Face
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            {/* Generate button */}
             <Button
-              size="lg"
-              onClick={handleGenerateFace}
-              disabled={
-                generating ||
-                !description.trim() ||
-                uploading
-              }
+              onClick={() => {
+                if (faceGenerated) {
+                  setShowRegenerateConfirm(true);
+                } else if (
+                  selectedMoodboardIds.size === 0 &&
+                  moodboardAssets.length > 0
+                ) {
+                  setShowNoRefsConfirm(true);
+                } else {
+                  handleGenerateFace();
+                }
+              }}
+              disabled={generating || !description.trim() || uploading}
+              className="w-full py-6 text-base"
             >
               {generating ? (
                 <>
-                  <Loader2 className="animate-spin" />
+                  <Loader2 className="h-5 w-5 animate-spin" />
                   Generating...
                 </>
               ) : (
                 <>
-                  <Sparkles />
-                  Generate Face
+                  <Sparkles className="h-5 w-5" />
+                  {faceGenerated ? "Regenerate Face" : "Generate Face"}
                 </>
               )}
             </Button>
+
+            {/* Regenerate confirm */}
+            <Dialog
+              open={showRegenerateConfirm}
+              onOpenChange={setShowRegenerateConfirm}
+            >
+              <DialogContent showCloseButton={false}>
+                <DialogHeader>
+                  <DialogTitle>Regenerate the entire face?</DialogTitle>
+                  <DialogDescription>
+                    This will generate a completely new face from the description
+                    and selected references. Your current face, any refinements,
+                    and all generated angles will no longer match the new face
+                    and will need to be redone.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowRegenerateConfirm(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setShowRegenerateConfirm(false);
+                      if (
+                        selectedMoodboardIds.size === 0 &&
+                        moodboardAssets.length > 0
+                      ) {
+                        setShowNoRefsConfirm(true);
+                      } else {
+                        handleGenerateFace();
+                      }
+                    }}
+                  >
+                    Regenerate
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* No refs confirm */}
+            <Dialog
+              open={showNoRefsConfirm}
+              onOpenChange={setShowNoRefsConfirm}
+            >
+              <DialogContent showCloseButton={false}>
+                <DialogHeader>
+                  <DialogTitle>Generate without reference images?</DialogTitle>
+                  <DialogDescription>
+                    You have {moodboardAssets.length} moodboard image
+                    {moodboardAssets.length !== 1 ? "s" : ""} but none are
+                    selected as reference. The model will be generated from the
+                    description only, which may produce less accurate results.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowNoRefsConfirm(false)}
+                  >
+                    Go back and select images
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setShowNoRefsConfirm(false);
+                      handleGenerateFace();
+                    }}
+                  >
+                    Generate anyway
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
             {generateJobId && (
               <JobStatus
@@ -536,155 +472,37 @@ export default function ModelPage() {
               />
             )}
 
-            {generatedFace && !refinedFace && (
-              <div className="space-y-2">
-                <Label className="text-sm text-muted-foreground">
-                  Generated Face
-                </Label>
-                <div className="max-w-sm overflow-hidden rounded-lg border">
+            {/* Generated face result */}
+            {faceGenerated && currentFaceUrl && (
+              <div className="space-y-4">
+                <div className="overflow-hidden rounded-lg border border-border">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={
-                      generatedFace.storage_path ??
-                      generatedFace.external_url ??
-                      ""
-                    }
-                    alt="Generated face"
-                    className="w-full object-cover"
+                    src={currentFaceUrl}
+                    alt="Generated model face"
+                    className="w-full object-contain"
+                    style={{ maxHeight: "60vh" }}
                   />
                 </div>
+
+                <Button
+                  size="lg"
+                  onClick={() =>
+                    router.push(
+                      `/dashboard/projects/${params.projectId}/model/refine`
+                    )
+                  }
+                  className="w-full py-6 text-base"
+                >
+                  Continue to Refinement & Angles
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Button>
               </div>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Section 3: Refinement */}
-        {(generatedFace || refinedFace) && currentFaceUrl && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <RotateCw className="h-4 w-4" />
-                Refine Face
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Paint a mask over the areas you want to change and describe
-                the desired modification.
-              </p>
-
-              <RefinementPanel
-                imageUrl={currentFaceUrl}
-                onRefine={handleRefine}
-                referenceImages={moodboardReferenceImages}
-                isProcessing={refining}
-              />
-
-              {refineJobId && (
-                <JobStatus
-                  jobId={refineJobId}
-                  onComplete={handleRefineComplete}
-                />
-              )}
-
-              {refinedFace && (
-                <div className="space-y-2">
-                  <Label className="text-sm text-muted-foreground">
-                    Refined Face
-                  </Label>
-                  <div className="max-w-sm overflow-hidden rounded-lg border">
-                    <img
-                      src={
-                        refinedFace.storage_path ??
-                        refinedFace.external_url ??
-                        ""
-                      }
-                      alt="Refined face"
-                      className="w-full object-cover"
-                    />
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Section 4: Generate Angles */}
-        {hasFinalFace && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <RotateCw className="h-4 w-4" />
-                Generate Angles
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Generate 5 perspective angles of the model face for
-                consistency across poses.
-              </p>
-
-              <Button
-                size="lg"
-                onClick={handleGenerateAngles}
-                disabled={generatingAngles || !finalFaceUrl}
-              >
-                {generatingAngles ? (
-                  <>
-                    <Loader2 className="animate-spin" />
-                    Generating Angles ({angleJobsCompleted}/
-                    {angleJobIds.length})...
-                  </>
-                ) : (
-                  <>
-                    <RotateCw />
-                    Generate 5 Angles
-                  </>
-                )}
-              </Button>
-
-              {angleJobIds.map((jobId) => (
-                <JobStatus
-                  key={jobId}
-                  jobId={jobId}
-                  onComplete={handleAngleJobComplete}
-                />
-              ))}
-
-              {angleAssets.length > 0 && (
-                <div className="space-y-2">
-                  <Label className="text-sm text-muted-foreground">
-                    Generated Angles ({angleAssets.length}/{ANGLE_SET.length})
-                  </Label>
-                  <AssetGrid assets={angleAssets} columns={5} />
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Section 5: Approve */}
-        {hasFinalFace && angleAssets.length > 0 && (
-          <div className="flex justify-end">
-            <Button
-              size="lg"
-              onClick={handleApprove}
-              disabled={approving}
-            >
-              {approving ? (
-                <>
-                  <Loader2 className="animate-spin" />
-                  Approving...
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 />
-                  Approve & Continue
-                  <ArrowRight className="ml-1 h-4 w-4" />
-                </>
-              )}
-            </Button>
           </div>
-        )}
+        </div>
+
+        <HelpChat context="model-generation" />
       </div>
     </StageGate>
   );

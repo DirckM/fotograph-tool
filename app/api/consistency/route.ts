@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     feature: "consistency",
     imagePaths: referenceImagePaths,
     prompt,
-    inputParams: { sceneDescription, style },
+    inputParams: { sceneDescription, style, referenceCount: referenceImagePaths.length },
   });
 
   return NextResponse.json(result);

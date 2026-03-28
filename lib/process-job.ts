@@ -33,7 +33,7 @@ export async function processJob({
       feature,
       status: "processing",
       input_images: imagePaths,
-      input_params: inputParams,
+      input_params: { ...inputParams, generatedPrompt: prompt },
       project_id: projectId ?? null,
       stage: stage ?? null,
     })

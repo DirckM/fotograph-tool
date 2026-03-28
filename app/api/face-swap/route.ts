@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       feature: "face_swap",
       imagePaths: [targetImagePath, ...sourceImagePaths],
       prompt,
-      inputParams: { lookDirection, clothingTexture },
+      inputParams: { lookDirection, clothingTexture, sourceCount: sourceImagePaths.length },
     });
 
     return NextResponse.json(result);

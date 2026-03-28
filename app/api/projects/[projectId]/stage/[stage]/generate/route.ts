@@ -44,7 +44,7 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { prompt, imagePaths } = await request.json();
+  const { prompt, imagePaths, referenceNotes } = await request.json();
 
   const feature = stageFeatureMap[stageNum];
   if (!feature) {
@@ -62,6 +62,10 @@ export async function POST(
       feature,
       imagePaths: imagePaths ?? [],
       prompt: generatedPrompt,
+      inputParams: {
+        userPrompt: prompt,
+        referenceNotes: referenceNotes || null,
+      },
       projectId,
       stage: stageNum,
     });

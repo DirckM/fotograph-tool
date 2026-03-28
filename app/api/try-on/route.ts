@@ -25,7 +25,7 @@ export async function POST(request: Request) {
       feature: "try_on",
       imagePaths: [clothingImagePath, personImagePath],
       prompt,
-      inputParams: { clothingType },
+      inputParams: { clothingType, context },
     });
 
     return NextResponse.json(result);

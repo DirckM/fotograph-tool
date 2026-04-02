@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-04-02T20:09:25.913Z",
+  "function": "generateWithImages",
+  "model": "gemini-3-pro-image-preview",
+  "prompt": "Generate a photorealistic portrait of a fashion model with the following description:\n\nYoung man, early 20s, light skin with prominent freckles, short cropped red-blonde hair, sharp blue eyes, strong jawline, athletic build. Clean-shaven, symmetrical features.\n\nReference images are provided. DO NOT copy any reference face as-is. Instead, only extract the specific traits noted below and apply them to a NEW face matching the description above.\n\nPer-reference notes (each note describes what to extract from the corresponding image):\n- Use the sharp blue eyes, strong jawline, specific nose shape, lip shape, and overall face shape/structure from the reference image.\n- Dense, prominent light brown freckles scattered across the nose, cheeks, and forehead.\n\nIMPORTANT: The description above defines the identity (gender, age, ethnicity, hair, eyes, etc). The reference images are ONLY for borrowing specific visual traits mentioned in the notes — ignore everything else about the reference faces.\n\nRequirements:\n- The result must be a single, consistent human identity\n- The description above is the source of truth for the model's identity\n- Photorealistic quality suitable for professional fashion photography\n- Clean, well-lit studio portrait style\n- Sharp facial features with natural skin texture\n- Neutral expression suitable for fashion work\n- The model should appear natural and believable, not AI-generated",
+  "inputImages": [
+    {
+      "mimeType": "image/jpeg",
+      "sizeBytes": 228447,
+      "file": "input_0.jpg"
+    },
+    {
+      "mimeType": "image/jpeg",
+      "sizeBytes": 127410,
+      "file": "input_1.jpg"
+    }
+  ],
+  "output": {
+    "type": "image",
+    "mimeType": "image/jpeg",
+    "sizeBytes": 541950,
+    "file": "output.jpg"
+  },
+  "durationMs": 22044
+}

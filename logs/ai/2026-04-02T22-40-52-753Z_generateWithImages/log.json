@@ -1,0 +1,20 @@
+{
+  "timestamp": "2026-04-02T22:40:52.753Z",
+  "function": "generateWithImages",
+  "model": "gemini-3-pro-image-preview",
+  "prompt": "Generate a neutral gray-toned mannequin figure showing the following pose:\n\nGenerate the pose as describe in the reference image\n\nUse the provided reference images as visual inspiration for the pose.\n\nRequirements:\n- Featureless mannequin figure with smooth gray skin and visible form/shading\n- No facial features, hair, or clothing — just a neutral humanoid form\n- Clean white background\n- Visible depth and volume through light and shadow on the body\n- Clear body pose with distinct limb positions and joint angles\n- Natural, anatomically correct pose\n- Fashion/editorial style posing\n- Full body visible from head to toe",
+  "inputImages": [
+    {
+      "mimeType": "image/jpeg",
+      "sizeBytes": 7728,
+      "file": "input_0.jpg"
+    }
+  ],
+  "output": {
+    "type": "image",
+    "mimeType": "image/jpeg",
+    "sizeBytes": 309369,
+    "file": "output.jpg"
+  },
+  "durationMs": 16250
+}

@@ -1,0 +1,18 @@
+{
+  "timestamp": "2026-04-02T19:53:08.647Z",
+  "function": "generateText",
+  "model": "gemini-2.5-flash",
+  "prompt": "You are a visual analysis assistant for a fashion model AI generator.\n\nThe user is generating a model with this description:\n\"Young man, early 20s, light skin with prominent freckles, short cropped red-blonde hair, sharp blue eyes, strong jawline, athletic build. Clean-shaven, symmetrical features.\"\n\nThey selected this reference image and wrote this note:\n\"I want his face\"\n\nLook at the reference image and the user's note. Your job is to translate the note into a precise description of what traits to extract, while RESPECTING the model description.\n\nCRITICAL RULE: The model description is the source of truth. If a trait in the reference image conflicts with the description (e.g., description says \"red-blonde hair\" but image shows dark hair), do NOT include that trait in the refined note. Only extract traits that are compatible with the description.\n\nWhen the note is vague (e.g., \"I want his face\", \"use her look\") AND the reference image has traits that conflict with the description, you MUST ask a clarification question so the user can specify which traits to keep.\n\nRespond with ONLY valid JSON (no markdown):\n{\n  \"refined\": \"the refined note describing only compatible traits to extract\",\n  \"question\": \"a clarification question if the note is ambiguous and there are conflicts, or null if everything is clear\"\n}\n\nExamples:\n\nNote: \"I want his face\" + description says \"red-blonde hair\" + image shows dark curly hair:\n{\"refined\": \"Use the strong jawline structure and prominent cheekbones\", \"question\": \"This reference has dark curly hair, but your description says red-blonde. I kept the jawline and cheekbones. Are there other specific features from this face you want — like the eye shape, nose, or skin texture?\"}\n\nNote: \"I want his freckles\" + image shows freckled face:\n{\"refined\": \"Dense, prominent light brown freckles scattered across the nose, cheeks, forehead, and chin\", \"question\": null}\n\nNote: \"nice hair\" + description says \"short cropped hair\" + image shows long flowing hair:\n{\"refined\": \"\", \"question\": \"This reference has long flowing hair, but your description says short cropped. Did you mean to borrow the hair color/texture, or a different trait from this image?\"}\n\nNote: \"I want her face\" + description matches the reference well:\n{\"refined\": \"Use the high cheekbones, almond-shaped green eyes, straight nose bridge, and full lips with a natural Cupid's bow\", \"question\": null}\n\nRules:\n- Be specific about colors, patterns, shapes, textures\n- Keep the refined note to 1-2 sentences max\n- Do NOT include gender or identity — just visual traits\n- Questions should be friendly and specific about what conflicts were found",
+  "inputImages": [
+    {
+      "mimeType": "image/jpeg",
+      "sizeBytes": 228447,
+      "file": "input_0.jpg"
+    }
+  ],
+  "output": {
+    "type": "text",
+    "text": "{\n  \"refined\": \"Extract the strong jawline, the narrow and slightly hooded eye shape, and the overall angular facial structure.\",\n  \"question\": \"This reference image has dark brown curly hair and no prominent freckles, but your description specifies short cropped red-blonde hair and prominent freckles. I've included the strong jawline and narrow eye shape. Are there other specific features from this face you want, like the nose or lips, or should the model description be followed for hair and freckles?\"\n}"
+  },
+  "durationMs": 8488
+}

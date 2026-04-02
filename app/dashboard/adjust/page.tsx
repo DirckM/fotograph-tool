@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { ImageUpload } from "@/components/image-upload";
 import { ResultViewer } from "@/components/result-viewer";
@@ -13,6 +13,14 @@ import { Wand2 } from "lucide-react";
 import type { Job } from "@/types";
 
 export default function AdjustPage() {
+  return (
+    <Suspense>
+      <AdjustPageInner />
+    </Suspense>
+  );
+}
+
+function AdjustPageInner() {
   const searchParams = useSearchParams();
   const [userPrompt, setUserPrompt] = useState("");
   const [preview, setPreview] = useState<string | null>(null);
@@ -79,11 +87,11 @@ export default function AdjustPage() {
   }, [handleRemove]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6 lg:p-8">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-medium">
           <Wand2 className="h-5 w-5" />
-          Image <span className="font-serif">Adjust</span>
+          Image Adjust
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Make targeted edits to an image using a text description of what to change.

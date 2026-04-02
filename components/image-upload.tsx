@@ -13,6 +13,7 @@ interface ImageUploadProps {
   description?: string;
   className?: string;
   accept?: string;
+  multiple?: boolean;
 }
 
 export function ImageUpload({
@@ -23,6 +24,7 @@ export function ImageUpload({
   description = "Drag and drop or click to browse",
   className,
   accept = "image/jpeg,image/png,image/webp",
+  multiple = false,
 }: ImageUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
 
@@ -30,22 +32,29 @@ export function ImageUpload({
     (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragging(false);
-      const file = e.dataTransfer.files[0];
-      if (file && file.type.startsWith("image/")) {
-        onUpload(file);
+      const files = Array.from(e.dataTransfer.files).filter((f) =>
+        f.type.startsWith("image/")
+      );
+      if (multiple) {
+        files.forEach((file) => onUpload(file));
+      } else if (files[0]) {
+        onUpload(files[0]);
       }
     },
-    [onUpload]
+    [onUpload, multiple]
   );
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) {
-        onUpload(file);
+      const files = Array.from(e.target.files ?? []);
+      if (multiple) {
+        files.forEach((file) => onUpload(file));
+      } else if (files[0]) {
+        onUpload(files[0]);
       }
+      e.target.value = "";
     },
-    [onUpload]
+    [onUpload, multiple]
   );
 
   if (preview) {
@@ -89,6 +98,7 @@ export function ImageUpload({
         type="file"
         className="hidden"
         accept={accept}
+        multiple={multiple}
         onChange={handleChange}
       />
       <div className="flex flex-col items-center gap-2 p-6">

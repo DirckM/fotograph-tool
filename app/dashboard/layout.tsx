@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/sidebar";
+import { OnboardingProvider } from "@/components/onboarding-tour";
 
 export default function DashboardLayout({
   children,
@@ -6,11 +7,13 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar />
-      <main className="flex-1 overflow-auto p-6 lg:p-8">
-        {children}
-      </main>
-    </div>
+    <OnboardingProvider>
+      <div className="flex h-screen overflow-hidden">
+        <Sidebar />
+        <main className="flex-1 overflow-auto">
+          {children}
+        </main>
+      </div>
+    </OnboardingProvider>
   );
 }

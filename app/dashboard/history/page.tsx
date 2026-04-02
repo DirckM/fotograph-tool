@@ -79,11 +79,11 @@ export default function HistoryPage() {
   }, [router]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6 lg:p-8">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-medium">
           <History className="h-5 w-5" />
-          Job <span className="font-serif">History</span>
+          Job History
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           All your previous image processing jobs.

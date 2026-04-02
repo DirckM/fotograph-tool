@@ -63,11 +63,11 @@ export default function UpscalePage() {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6 lg:p-8">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-medium">
           <ZoomIn className="h-5 w-5" />
-          High-Fidelity <span className="font-serif">Upscaling</span>
+          High-Fidelity Upscaling
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Enhance image resolution and add fine details like pores, textures, and fabric grain.

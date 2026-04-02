@@ -44,7 +44,7 @@ export default function NewProjectPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6 p-6 lg:p-8">
       <div className="flex items-center gap-3">
         <Button
           variant="ghost"
@@ -63,7 +63,7 @@ export default function NewProjectPage() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-6" data-tour="new-project-form">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Project Details</CardTitle>
@@ -127,7 +127,7 @@ export default function NewProjectPage() {
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={!name.trim() || saving}>
+          <Button type="submit" disabled={!name.trim() || saving} data-tour="new-project-submit">
             {saving ? "Creating..." : "Create Project"}
           </Button>
         </div>

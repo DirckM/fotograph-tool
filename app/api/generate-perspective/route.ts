@@ -20,6 +20,7 @@ export async function POST(request: Request) {
   const prompt = generatePerspectivePrompt(angle);
 
   try {
+    console.log("[generate-perspective] Starting:", { angle, imagePath: imagePath?.slice(0, 80) });
     const result = await processJob({
       userId: user.id,
       feature: "generate_perspective",
@@ -30,8 +31,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json(result);
   } catch (err) {
+    console.error("[generate-perspective] FULL ERROR:", err);
     const message = err instanceof Error ? err.message : "Processing failed";
-    console.error("Generate perspective error:", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

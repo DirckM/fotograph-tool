@@ -3,24 +3,32 @@
 import type { Job } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { ZoomIn, Users, Shirt, UserCheck, Wand2, ScanFace } from "lucide-react";
+import { ZoomIn, Users, Shirt, UserCheck, Wand2, ScanFace, User, Image, Move, Layers, Sparkles } from "lucide-react";
 
-const featureIcons = {
+const featureIcons: Record<string, typeof ZoomIn> = {
   upscale: ZoomIn,
   face_swap: Users,
   try_on: Shirt,
   consistency: UserCheck,
   adjust: Wand2,
   generate_perspective: ScanFace,
+  model_generation: User,
+  environment_generation: Image,
+  pose_generation: Move,
+  final_composite: Layers,
 };
 
-const featureLabels = {
+const featureLabels: Record<string, string> = {
   upscale: "Upscale",
   face_swap: "Face Swap",
   try_on: "Try-On",
   consistency: "Consistency",
   adjust: "Adjust",
   generate_perspective: "Generate Perspective",
+  model_generation: "Model Generation",
+  environment_generation: "Environment",
+  pose_generation: "Pose Generation",
+  final_composite: "Final Composite",
 };
 
 interface HistoryCardProps {
@@ -29,8 +37,8 @@ interface HistoryCardProps {
 }
 
 export function HistoryCard({ job, onClick }: HistoryCardProps) {
-  const Icon = featureIcons[job.feature];
-  const label = featureLabels[job.feature];
+  const Icon = featureIcons[job.feature] ?? Sparkles;
+  const label = featureLabels[job.feature] ?? job.feature;
   const date = new Date(job.created_at).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",

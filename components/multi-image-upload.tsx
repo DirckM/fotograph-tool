@@ -8,7 +8,7 @@ import { QualityIndicator } from "@/components/quality-indicator";
 import { QUALITY_LEVELS } from "@/types";
 
 interface UploadedImage {
-  file: File;
+  file?: File;
   preview: string;
 }
 

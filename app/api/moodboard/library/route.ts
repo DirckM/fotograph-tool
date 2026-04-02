@@ -16,6 +16,51 @@ const CATEGORY_TO_ASSET_TYPE: Record<string, string> = {
   garment: "garment_image",
 };
 
+export async function POST(request: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await request.json();
+  const { asset_type, storage_path } = body;
+
+  if (!asset_type || !storage_path) {
+    return NextResponse.json(
+      { error: "asset_type and storage_path are required" },
+      { status: 400 }
+    );
+  }
+
+  if (!MOODBOARD_ASSET_TYPES.includes(asset_type)) {
+    return NextResponse.json(
+      { error: "Invalid asset_type" },
+      { status: 400 }
+    );
+  }
+
+  const { data: asset, error } = await supabase
+    .from("project_assets")
+    .insert({
+      user_id: user.id,
+      project_id: null,
+      stage: 0,
+      asset_type,
+      source: "upload",
+      storage_path,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json(asset, { status: 201 });
+}
+
 export async function GET(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

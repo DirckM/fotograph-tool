@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Shirt, Loader2, RotateCw } from "lucide-react";
+import { Shirt, Loader2, RotateCw, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ImageUpload } from "@/components/image-upload";
 import { JobStatus } from "@/components/job-status";
 import { AssetGrid } from "@/components/projects/asset-grid";
 import { StageGate } from "@/components/projects/stage-gate";
+import { StageLayout } from "@/components/projects/stage-layout";
 import { useFileUpload } from "@/lib/hooks";
 import type { Project, ProjectAsset, Job } from "@/types";
 
@@ -171,79 +171,87 @@ export default function GarmentStagePage() {
 
   return (
     <StageGate currentStage={project.current_stage} requiredStage={4}>
-      <div className="flex flex-col gap-6">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-medium">
-            <Shirt className="h-5 w-5" />
-            Garment <span className="font-serif">Importation</span>
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Upload garment reference images. If you only have one angle, generate additional perspectives automatically.
-          </p>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Upload Garment Images</CardTitle>
-          </CardHeader>
-          <CardContent>
+      <StageLayout
+        title={
+          <>
+            Stage 4: <span className="text-heading">Garment</span> Importation
+          </>
+        }
+        description="Upload garment reference images. If you only have one angle, generate additional perspectives automatically."
+        contentKey={String(assets.length)}
+        aside={
+          <div className="flex flex-col gap-4">
+            <div data-tour="garment-upload">
             <ImageUpload
               onUpload={handleUpload}
               label="Upload garment image"
               description="Upload photos of the garment from different angles"
               className="min-h-40"
             />
+            </div>
             {uploading && (
-              <p className="mt-2 text-sm text-muted-foreground">
-                Uploading...
+              <p className="text-sm text-muted-foreground">Uploading...</p>
+            )}
+
+            {assets.length === 1 && (
+              <Button
+                variant="outline"
+                onClick={handleGeneratePerspectives}
+                disabled={generatingPerspectives}
+                className="w-full"
+              >
+                <RotateCw className="mr-2 h-4 w-4" />
+                {generatingPerspectives
+                  ? "Generating..."
+                  : "Generate More Angles"}
+              </Button>
+            )}
+
+            <JobStatus
+              jobId={perspJobId}
+              onComplete={handlePerspJobComplete}
+            />
+
+            {assets.length > 0 && (
+              <p className="text-sm text-muted-foreground">
+                {assets.length} garment {assets.length === 1 ? "image" : "images"} uploaded
               </p>
             )}
-          </CardContent>
-        </Card>
-
-        {assets.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">
-                Garment Images ({assets.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <AssetGrid assets={assets} onRemove={handleRemove} />
-
-              {assets.length === 1 && (
-                <Button
-                  variant="outline"
-                  onClick={handleGeneratePerspectives}
-                  disabled={generatingPerspectives}
-                >
-                  <RotateCw className="mr-2 h-4 w-4" />
-                  {generatingPerspectives
-                    ? "Generating..."
-                    : "Generate More Angles"}
-                </Button>
-              )}
-
-              <JobStatus
-                jobId={perspJobId}
-                onComplete={handlePerspJobComplete}
-              />
-            </CardContent>
-          </Card>
-        )}
-
-        {assets.length > 0 && (
-          <div className="flex justify-end">
+          </div>
+        }
+        footer={
+          assets.length > 0 ? (
             <Button
               size="lg"
               onClick={handleApprove}
               disabled={approving}
             >
-              {approving ? "Approving..." : "Approve & Continue"}
+              {approving ? (
+                <>
+                  <Loader2 className="animate-spin" />
+                  Approving...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 />
+                  Approve & Continue
+                </>
+              )}
             </Button>
+          ) : undefined
+        }
+      >
+        {assets.length > 0 ? (
+          <div className="flex-1 overflow-y-auto">
+            <AssetGrid assets={assets} onRemove={handleRemove} />
+          </div>
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-muted/30 text-muted-foreground">
+            <Shirt className="h-12 w-12 opacity-40" />
+            <p className="text-sm">Upload garment images to get started</p>
           </div>
         )}
-      </div>
+      </StageLayout>
     </StageGate>
   );
 }

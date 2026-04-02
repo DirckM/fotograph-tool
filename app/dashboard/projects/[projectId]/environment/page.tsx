@@ -2,30 +2,83 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Loader2, Sparkles, CheckCircle2, Upload } from "lucide-react";
+import { Check, ChevronDown, Loader2, Sparkles, CheckCircle2, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { ImageUpload } from "@/components/image-upload";
 import { JobStatus } from "@/components/job-status";
-import { MoodboardSearch } from "@/components/projects/moodboard-search";
-import { MoodboardGrid } from "@/components/projects/moodboard-grid";
-import { RefinementPanel } from "@/components/projects/refinement-panel";
+import { StageLayout } from "@/components/projects/stage-layout";
+import { MoodboardBrowser } from "@/components/projects/moodboard-browser";
+import { RefinementControls } from "@/components/projects/refinement-panel";
+import { MaskCanvas } from "@/components/projects/mask-canvas";
 import { StageGate } from "@/components/projects/stage-gate";
+import { cn } from "@/lib/utils";
 import { useFileUpload } from "@/lib/hooks";
+import { useHelpChat } from "@/components/projects/help-chat-context";
 import type { Project, ProjectAsset, Job } from "@/types";
 
 interface MoodboardImage {
   id: string;
   url: string;
   selected: boolean;
+  note?: string;
+}
+
+function OptionRow({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: string[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <div className="flex flex-wrap gap-1.5">
+        {options.map((opt) => {
+          const isSelected = value === opt;
+          return (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => onChange(isSelected ? "" : opt)}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all",
+                isSelected
+                  ? "border-blue-500/50 bg-blue-500/15 text-blue-400"
+                  : "border-border/60 bg-background/50 text-muted-foreground hover:border-foreground/20 hover:text-foreground"
+              )}
+            >
+              {opt}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function resolveAssetUrl(asset: ProjectAsset): string {
+  const url = asset.external_url ?? asset.storage_path ?? "";
+  if (!url) return "";
+  if (url.startsWith("http")) return url;
+  // Relative storage path — resolve to Supabase public URL
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (supabaseUrl) {
+    return `${supabaseUrl}/storage/v1/object/public/project-assets/${url}`;
+  }
+  return url;
 }
 
 export default function EnvironmentStagePage() {
   const params = useParams<{ projectId: string }>();
   const router = useRouter();
   const { upload, uploading } = useFileUpload();
+  const { setChatState, clearChatState } = useHelpChat();
 
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,8 +88,18 @@ export default function EnvironmentStagePage() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [showEnvOptions, setShowEnvOptions] = useState(false);
+  const [envOptions, setEnvOptions] = useState({
+    lighting: "" as string,
+    lightSource: "" as string,
+    timeOfDay: "" as string,
+    camera: "" as string,
+    mood: "" as string,
+  });
   const [refineJobId, setRefineJobId] = useState<string | null>(null);
   const [refining, setRefining] = useState(false);
+  const [maskDataUrl, setMaskDataUrl] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -58,7 +121,7 @@ export default function EnvironmentStagePage() {
             .filter((a) => a.asset_type === "env_moodboard")
             .map((a) => ({
               id: a.id,
-              url: a.external_url ?? a.storage_path ?? "",
+              url: resolveAssetUrl(a),
               selected: true,
             }));
           setMoodboard(moodboardAssets);
@@ -111,12 +174,32 @@ export default function EnvironmentStagePage() {
         body: JSON.stringify({
           stage: 2,
           asset_type: "env_moodboard",
-          storage_path: result.path,
+          storage_path: result.publicUrl,
           source: "upload",
         }),
       });
     },
     [params.projectId, upload]
+  );
+
+  const handleAddFromLibrary = useCallback(
+    async (url: string) => {
+      const id = crypto.randomUUID();
+      setMoodboard((prev) => [...prev, { id, url, selected: true }]);
+
+      const isExternal = url.startsWith("http") && !url.includes("supabase");
+      await fetch(`/api/projects/${params.projectId}/assets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stage: 2,
+          asset_type: "env_moodboard",
+          source: "upload",
+          ...(isExternal ? { external_url: url } : { storage_path: url }),
+        }),
+      });
+    },
+    [params.projectId]
   );
 
   const handleToggleSelect = useCallback((id: string) => {
@@ -137,15 +220,30 @@ export default function EnvironmentStagePage() {
     [params.projectId]
   );
 
-  const handleGenerate = useCallback(async () => {
-    if (!prompt.trim()) return;
+  const handleNoteChange = useCallback((id: string, note: string) => {
+    setNotes((prev) => ({ ...prev, [id]: note }));
+  }, []);
+
+  const executeGeneration = useCallback(async (overridePrompt?: string, skip?: boolean) => {
+    const selectedImages = moodboard.filter((img) => img.selected);
+    const selectedUrls = selectedImages.map((img) => img.url);
+    const refNotes = selectedImages
+      .filter((img) => notes[img.id])
+      .map((img) => `- ${notes[img.id]}`)
+      .join("\n");
+
+    const details = [
+      envOptions.lighting && `Lighting: ${envOptions.lighting}`,
+      envOptions.lightSource && `Light source: ${envOptions.lightSource}`,
+      envOptions.timeOfDay && `Time of day: ${envOptions.timeOfDay}`,
+      envOptions.camera && `Camera angle: ${envOptions.camera}`,
+      envOptions.mood && `Mood: ${envOptions.mood}`,
+    ].filter(Boolean).join(". ");
+    const basePrompt = overridePrompt || prompt.trim();
+    const fullPrompt = details ? `${basePrompt}\n\n${details}` : basePrompt;
 
     setGenerating(true);
     setResultImage(null);
-
-    const selectedImages = moodboard
-      .filter((img) => img.selected)
-      .map((img) => img.url);
 
     try {
       const res = await fetch(
@@ -154,20 +252,43 @@ export default function EnvironmentStagePage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            prompt: prompt.trim(),
-            imagePaths: selectedImages,
+            prompt: fullPrompt,
+            imagePaths: selectedUrls,
+            referenceNotes: refNotes || undefined,
+            skipCompletenessCheck: skip ?? false,
+            enhancedPrompt: overridePrompt || undefined,
           }),
         }
       );
 
       if (res.ok) {
-        const job: Job = await res.json();
-        setJobId(job.id);
+        const data = await res.json();
+        if (data.needsClarification && data.clarificationType === "completeness-check") {
+          setChatState({
+            completenessCheck: {
+              stage: data.stage,
+              originalPrompt: data.originalPrompt,
+              questions: data.questions,
+              isMaskRefinement: false,
+            },
+            onEnhancedPromptConfirm: (enhancedPrompt: string) => {
+              clearChatState();
+              executeGeneration(enhancedPrompt, true);
+            },
+          });
+          return;
+        }
+        setJobId(data.id);
       }
     } finally {
       setGenerating(false);
     }
-  }, [params.projectId, prompt, moodboard]);
+  }, [params.projectId, prompt, moodboard, notes, envOptions, setChatState, clearChatState]);
+
+  const handleGenerate = useCallback(async () => {
+    if (!prompt.trim()) return;
+    executeGeneration();
+  }, [prompt, executeGeneration]);
 
   const handleJobComplete = useCallback(
     async (job: Job) => {
@@ -187,12 +308,12 @@ export default function EnvironmentStagePage() {
     [params.projectId, prompt]
   );
 
-  const handleRefine = useCallback(
+  const executeRefine = useCallback(
     async (data: {
       prompt: string;
       maskDataUrl: string;
       referenceImagePaths?: string[];
-    }) => {
+    }, overridePrompt?: string, skip?: boolean) => {
       if (!resultImage) return;
 
       setRefining(true);
@@ -204,25 +325,53 @@ export default function EnvironmentStagePage() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              prompt: data.prompt,
+              prompt: overridePrompt || data.prompt,
               imagePaths: [
                 resultImage,
                 ...(data.referenceImagePaths ?? []),
               ],
               maskPath: data.maskDataUrl,
+              skipCompletenessCheck: skip ?? false,
+              enhancedPrompt: overridePrompt || undefined,
             }),
           }
         );
 
         if (res.ok) {
-          const job: Job = await res.json();
-          setRefineJobId(job.id);
+          const result = await res.json();
+          if (result.needsClarification && result.clarificationType === "completeness-check") {
+            setChatState({
+              completenessCheck: {
+                stage: result.stage,
+                originalPrompt: result.originalPrompt,
+                questions: result.questions,
+                isMaskRefinement: true,
+              },
+              onEnhancedPromptConfirm: (enhancedPrompt: string) => {
+                clearChatState();
+                executeRefine(data, enhancedPrompt, true);
+              },
+            });
+            return;
+          }
+          setRefineJobId(result.id);
         }
       } finally {
         setRefining(false);
       }
     },
-    [params.projectId, resultImage]
+    [params.projectId, resultImage, setChatState, clearChatState]
+  );
+
+  const handleRefine = useCallback(
+    (data: {
+      prompt: string;
+      maskDataUrl: string;
+      referenceImagePaths?: string[];
+    }) => {
+      executeRefine(data);
+    },
+    [executeRefine]
   );
 
   const handleRefineComplete = useCallback(
@@ -274,113 +423,33 @@ export default function EnvironmentStagePage() {
 
   return (
     <StageGate currentStage={project.current_stage} requiredStage={2}>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">Environment</h1>
-          <p className="text-muted-foreground">
-            Describe and generate the photographic environment for your scene.
-          </p>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Environment Description</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="env-prompt">
-                Describe the environment you want to create
-              </Label>
-              <Textarea
-                id="env-prompt"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="luxury parisian apartment, large windows, golden hour sunlight, warm wooden floor, minimalist furniture..."
-                rows={4}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Moodboard</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <MoodboardSearch
-              onAddImage={handleAddMoodboardImage}
-              projectDescription={prompt}
-            />
-
-            <div className="space-y-2">
-              <Label>Upload reference images</Label>
-              <ImageUpload
-                onUpload={handleManualUpload}
-                label="Upload moodboard image"
-                description={
-                  uploading ? "Uploading..." : "Drag and drop or click to browse"
-                }
-                className="h-32"
-              />
-            </div>
-
-            <MoodboardGrid
-              images={moodboard}
-              onToggleSelect={handleToggleSelect}
-              onRemove={handleRemove}
-            />
-          </CardContent>
-        </Card>
-
-        <Button
-          size="lg"
-          onClick={handleGenerate}
-          disabled={generating || !prompt.trim() || !!jobId}
-          className="w-full"
-        >
-          {generating || jobId ? (
-            <>
-              <Loader2 className="animate-spin" />
-              Generating...
-            </>
-          ) : (
-            <>
-              <Sparkles />
-              Generate Environment
-            </>
-          )}
-        </Button>
-
-        <JobStatus jobId={jobId} onComplete={handleJobComplete} />
-
-        {resultImage && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Generated Environment</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="overflow-hidden rounded-lg border">
-                <img
-                  src={resultImage}
-                  alt="Generated environment"
-                  className="w-full object-contain"
-                />
-              </div>
-
-              <RefinementPanel
-                imageUrl={resultImage}
+      <StageLayout
+        title={
+          <>
+            Stage 2: <span className="text-heading">Environment</span> Creation
+          </>
+        }
+        description="Describe and generate the photographic environment for your scene."
+        contentKey={resultImage ? "result" : "setup"}
+        aside={
+          resultImage ? (
+            <div className="flex flex-col gap-4">
+              <RefinementControls
                 onRefine={handleRefine}
                 referenceImages={selectedMoodboard.map((img) => ({
                   id: img.id,
                   url: img.url,
                 }))}
                 isProcessing={refining || !!refineJobId}
+                maskDataUrl={maskDataUrl}
               />
 
-              <JobStatus
-                jobId={refineJobId}
-                onComplete={handleRefineComplete}
-              />
+              {refineJobId && (
+                <JobStatus
+                  jobId={refineJobId}
+                  onComplete={handleRefineComplete}
+                />
+              )}
 
               <Button
                 size="lg"
@@ -400,10 +469,207 @@ export default function EnvironmentStagePage() {
                   </>
                 )}
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="env-prompt">
+                  Describe the environment you want to create
+                </Label>
+                <Textarea
+                  id="env-prompt"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="luxury parisian apartment, large windows, golden hour sunlight, warm wooden floor, minimalist furniture..."
+                  rows={4}
+                />
+              </div>
+
+              {/* Environment options — collapsible */}
+              {(() => {
+                const activeCount = Object.values(envOptions).filter(Boolean).length;
+                return (
+                  <div className="rounded-lg border border-border/60">
+                    <button
+                      type="button"
+                      onClick={() => setShowEnvOptions((p) => !p)}
+                      className="flex w-full items-center justify-between px-3 py-2 text-left"
+                      data-tour="env-options"
+                    >
+                      <span className="text-xs font-medium text-muted-foreground">
+                        Lighting & mood
+                        {activeCount > 0 && (
+                          <span className="ml-1.5 rounded-full bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-blue-400">
+                            {activeCount}
+                          </span>
+                        )}
+                      </span>
+                      <ChevronDown className={cn(
+                        "size-3.5 text-muted-foreground transition-transform",
+                        showEnvOptions && "rotate-180"
+                      )} />
+                    </button>
+                    {showEnvOptions && (
+                      <div className="space-y-3 border-t border-border/40 px-3 pb-3 pt-2">
+                        <OptionRow
+                          label="Lighting"
+                          options={["Natural daylight", "Golden hour", "Overcast soft", "Studio flash", "Neon/colored", "Candlelight", "Dramatic shadows"]}
+                          value={envOptions.lighting}
+                          onChange={(v) => setEnvOptions((p) => ({ ...p, lighting: v }))}
+                        />
+                        <OptionRow
+                          label="Light source"
+                          options={["Through windows", "Overhead", "Side/directional", "Backlit", "Multiple sources", "Ambient only"]}
+                          value={envOptions.lightSource}
+                          onChange={(v) => setEnvOptions((p) => ({ ...p, lightSource: v }))}
+                        />
+                        <OptionRow
+                          label="Time of day"
+                          options={["Morning", "Midday", "Afternoon", "Sunset", "Blue hour", "Night"]}
+                          value={envOptions.timeOfDay}
+                          onChange={(v) => setEnvOptions((p) => ({ ...p, timeOfDay: v }))}
+                        />
+                        <OptionRow
+                          label="Camera angle"
+                          options={["Eye level", "Low angle", "High angle", "Wide establishing", "Close-up detail", "Dutch angle"]}
+                          value={envOptions.camera}
+                          onChange={(v) => setEnvOptions((p) => ({ ...p, camera: v }))}
+                        />
+                        <OptionRow
+                          label="Mood"
+                          options={["Warm & inviting", "Cool & minimal", "Moody & cinematic", "Bright & airy", "Edgy & raw", "Luxurious & polished"]}
+                          value={envOptions.mood}
+                          onChange={(v) => setEnvOptions((p) => ({ ...p, mood: v }))}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Reference images with notes */}
+              {moodboard.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>
+                      Reference Images
+                      {moodboard.filter((m) => m.selected).length > 0 && (
+                        <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                          {moodboard.filter((m) => m.selected).length} selected
+                        </span>
+                      )}
+                    </Label>
+                    <MoodboardBrowser
+                      images={moodboard}
+                      onAddFromPinterest={handleAddMoodboardImage}
+                      onAddFromLibrary={handleAddFromLibrary}
+                      onUpload={handleManualUpload}
+                      onToggleSelect={handleToggleSelect}
+                      onRemove={handleRemove}
+                      onNoteChange={handleNoteChange}
+                      projectDescription={prompt}
+                      uploading={uploading}
+                      libraryCategory="env"
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {moodboard.map((img) => (
+                      <div key={img.id} className="space-y-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSelect(img.id)}
+                          className={cn(
+                            "relative w-full overflow-hidden rounded-lg border-2 transition-colors",
+                            img.selected
+                              ? "border-blue-500 ring-2 ring-blue-500/20"
+                              : "border-border hover:border-muted-foreground/40"
+                          )}
+                        >
+                          <img
+                            src={img.url}
+                            alt="Reference"
+                            className="aspect-square w-full object-cover"
+                          />
+                          <div
+                            className={cn(
+                              "absolute left-1.5 top-1.5 flex size-5 items-center justify-center rounded-full border-2 transition-colors",
+                              img.selected
+                                ? "border-blue-500 bg-blue-500 text-white"
+                                : "border-white/70 bg-black/30 text-transparent"
+                            )}
+                          >
+                            <Check className="size-3" />
+                          </div>
+                        </button>
+                        {img.selected && (
+                          <input
+                            type="text"
+                            value={notes[img.id] ?? ""}
+                            onChange={(e) => handleNoteChange(img.id, e.target.value)}
+                            placeholder="e.g. &quot;this lighting&quot;"
+                            className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground placeholder:text-muted-foreground/50 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500/30"
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {moodboard.length === 0 && (
+                <MoodboardBrowser
+                  images={moodboard}
+                  onAddFromPinterest={handleAddMoodboardImage}
+                  onAddFromLibrary={handleAddFromLibrary}
+                  onUpload={handleManualUpload}
+                  onToggleSelect={handleToggleSelect}
+                  onRemove={handleRemove}
+                  onNoteChange={handleNoteChange}
+                  projectDescription={prompt}
+                  uploading={uploading}
+                  libraryCategory="env"
+                />
+              )}
+
+              <Button
+                size="lg"
+                onClick={handleGenerate}
+                disabled={generating || !prompt.trim() || !!jobId}
+                className="w-full"
+                data-tour="env-generate"
+              >
+                {generating || jobId ? (
+                  <>
+                    <Loader2 className="animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles />
+                    Generate Environment
+                  </>
+                )}
+              </Button>
+
+              <JobStatus jobId={jobId} onComplete={handleJobComplete} />
+            </div>
+          )
+        }
+      >
+        {resultImage ? (
+          <MaskCanvas
+            imageUrl={resultImage}
+            onExportMask={setMaskDataUrl}
+          />
+        ) : (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-muted/30">
+            <ImageIcon className="h-12 w-12 text-muted-foreground/50" />
+            <p className="text-sm text-muted-foreground">
+              Describe your environment and generate an image to get started
+            </p>
+          </div>
         )}
-      </div>
+      </StageLayout>
     </StageGate>
   );
 }

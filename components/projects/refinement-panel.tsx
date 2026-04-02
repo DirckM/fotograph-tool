@@ -2,14 +2,14 @@
 
 import { useState, useCallback } from "react";
 import Image from "next/image";
-import { Loader2, Check, Wand2 } from "lucide-react";
+import { Loader2, Check, Wand2, Maximize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { cn } from "@/lib/utils";
 import { MaskCanvas } from "./mask-canvas";
 
-interface RefinementPanelProps {
-  imageUrl: string;
+interface RefinementControlsProps {
   onRefine: (data: {
     prompt: string;
     maskDataUrl: string;
@@ -17,18 +17,16 @@ interface RefinementPanelProps {
   }) => void;
   referenceImages?: Array<{ id: string; url: string }>;
   isProcessing?: boolean;
-  className?: string;
+  maskDataUrl: string | null;
 }
 
-export function RefinementPanel({
-  imageUrl,
+export function RefinementControls({
   onRefine,
   referenceImages,
   isProcessing = false,
-  className,
-}: RefinementPanelProps) {
+  maskDataUrl,
+}: RefinementControlsProps) {
   const [prompt, setPrompt] = useState("");
-  const [maskDataUrl, setMaskDataUrl] = useState<string | null>(null);
   const [selectedRefs, setSelectedRefs] = useState<Set<string>>(new Set());
 
   const toggleReference = useCallback((id: string) => {
@@ -61,43 +59,36 @@ export function RefinementPanel({
   const canSubmit = !!maskDataUrl && prompt.trim().length > 0 && !isProcessing;
 
   return (
-    <div
-      className={cn(
-        "grid gap-6 md:grid-cols-[1fr_minmax(280px,360px)]",
-        className
-      )}
-    >
-      <MaskCanvas imageUrl={imageUrl} onExportMask={setMaskDataUrl} />
+    <div className="flex flex-col gap-4">
+      <Textarea
+        value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
+        placeholder="Describe what should change in the masked area..."
+        rows={3}
+        disabled={isProcessing}
+      />
 
-      <div className="flex flex-col gap-4">
-        <Textarea
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Describe what should change in the masked area..."
-          rows={4}
-          disabled={isProcessing}
-        />
-
-        {referenceImages && referenceImages.length > 0 && (
-          <div className="space-y-2">
-            <span className="text-xs font-medium text-muted-foreground">
-              Reference images
-            </span>
-            <div className="grid grid-cols-4 gap-2">
-              {referenceImages.map((img) => {
-                const isSelected = selectedRefs.has(img.id);
-                return (
+      {referenceImages && referenceImages.length > 0 && (
+        <div className="space-y-2">
+          <span className="text-xs font-medium text-muted-foreground">
+            Reference images
+          </span>
+          <div className="grid grid-cols-3 gap-2">
+            {referenceImages.map((img) => {
+              const isSelected = selectedRefs.has(img.id);
+              return (
+                <div
+                  key={img.id}
+                  className={cn(
+                    "group relative aspect-square overflow-hidden rounded-md border-2 transition-colors duration-150",
+                    isSelected ? "border-blue-500" : "border-transparent hover:border-muted-foreground/30"
+                  )}
+                >
                   <button
-                    key={img.id}
                     type="button"
                     onClick={() => toggleReference(img.id)}
                     disabled={isProcessing}
-                    className={cn(
-                      "group relative aspect-square overflow-hidden rounded-md border-2 transition-colors",
-                      isSelected
-                        ? "border-blue-500"
-                        : "border-transparent hover:border-muted-foreground/30"
-                    )}
+                    className="absolute inset-0 h-full w-full"
                   >
                     <Image
                       src={img.url}
@@ -112,31 +103,77 @@ export function RefinementPanel({
                       </div>
                     )}
                   </button>
-                );
-              })}
-            </div>
+                  <ImageLightbox
+                    src={img.url}
+                    className="absolute top-1 right-1 z-10 rounded bg-black/50 p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+                  >
+                    <Maximize2 className="h-3 w-3 text-white" />
+                  </ImageLightbox>
+                </div>
+              );
+            })}
           </div>
-        )}
+        </div>
+      )}
 
-        <Button
-          onClick={handleRefine}
-          disabled={!canSubmit}
-          className="w-full"
-          size="lg"
-        >
-          {isProcessing ? (
-            <>
-              <Loader2 className="animate-spin" data-icon="inline-start" />
-              Processing...
-            </>
-          ) : (
-            <>
-              <Wand2 data-icon="inline-start" />
-              Refine
-            </>
-          )}
-        </Button>
-      </div>
+      <Button
+        onClick={handleRefine}
+        disabled={!canSubmit}
+        className="w-full"
+        size="lg"
+      >
+        {isProcessing ? (
+          <>
+            <Loader2 className="animate-spin" data-icon="inline-start" />
+            Processing...
+          </>
+        ) : (
+          <>
+            <Wand2 data-icon="inline-start" />
+            Refine
+          </>
+        )}
+      </Button>
+    </div>
+  );
+}
+
+interface RefinementPanelProps {
+  imageUrl: string;
+  onRefine: (data: {
+    prompt: string;
+    maskDataUrl: string;
+    referenceImagePaths?: string[];
+  }) => void;
+  referenceImages?: Array<{ id: string; url: string }>;
+  isProcessing?: boolean;
+  className?: string;
+}
+
+export function RefinementPanel({
+  imageUrl,
+  onRefine,
+  referenceImages,
+  isProcessing = false,
+  className,
+}: RefinementPanelProps) {
+  const [maskDataUrl, setMaskDataUrl] = useState<string | null>(null);
+
+  return (
+    <div
+      className={cn(
+        "grid gap-6 md:grid-cols-[1fr_minmax(280px,360px)]",
+        className
+      )}
+    >
+      <MaskCanvas imageUrl={imageUrl} onExportMask={setMaskDataUrl} />
+
+      <RefinementControls
+        onRefine={onRefine}
+        referenceImages={referenceImages}
+        isProcessing={isProcessing}
+        maskDataUrl={maskDataUrl}
+      />
     </div>
   );
 }

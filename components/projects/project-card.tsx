@@ -3,7 +3,9 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Trash2 } from "lucide-react";
 import { STAGE_NAMES, type Project } from "@/types";
 
 function formatRelativeTime(dateString: string): string {
@@ -35,9 +37,10 @@ function statusBadgeVariant(status: Project["status"]) {
 interface ProjectCardProps {
   project: Project;
   onClick?: () => void;
+  onDelete?: () => void;
 }
 
-export function ProjectCard({ project, onClick }: ProjectCardProps) {
+export function ProjectCard({ project, onClick, onDelete }: ProjectCardProps) {
   const stageProgress = (project.current_stage / STAGE_NAMES.length) * 100;
   const stageName = STAGE_NAMES[project.current_stage - 1] ?? "Unknown";
   const badgeVariant = statusBadgeVariant(project.status);
@@ -58,15 +61,30 @@ export function ProjectCard({ project, onClick }: ProjectCardProps) {
               <CardDescription>{project.employer_name}</CardDescription>
             )}
           </div>
-          <Badge
-            variant={badgeVariant}
-            className={cn(
-              "shrink-0 capitalize",
-              project.status === "completed" && "border-green-600 text-green-600 dark:border-green-500 dark:text-green-500"
+          <div className="flex shrink-0 items-center gap-1">
+            <Badge
+              variant={badgeVariant}
+              className={cn(
+                "capitalize",
+                project.status === "completed" && "border-green-600 text-green-600 dark:border-green-500 dark:text-green-500"
+              )}
+            >
+              {project.status}
+            </Badge>
+            {onDelete && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
             )}
-          >
-            {project.status}
-          </Badge>
+          </div>
         </div>
       </CardHeader>
 

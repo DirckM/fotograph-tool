@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
-import { ArrowRight, Loader2, Sparkles, X } from "lucide-react";
+import { ArrowRight, Check, Loader2, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -17,9 +17,9 @@ import {
 } from "@/components/ui/dialog";
 import { JobStatus } from "@/components/job-status";
 import { MoodboardBrowser } from "@/components/projects/moodboard-browser";
-import { MoodboardStrip } from "@/components/projects/moodboard-strip";
 import { StageGate } from "@/components/projects/stage-gate";
-import { HelpChat } from "@/components/help-chat";
+import { useHelpChat } from "@/components/projects/help-chat-context";
+import { cn } from "@/lib/utils";
 import { useFileUpload } from "@/lib/hooks";
 import type { Project, ProjectAsset, Job } from "@/types";
 
@@ -27,6 +27,7 @@ export default function ModelPage() {
   const params = useParams<{ projectId: string }>();
   const router = useRouter();
   const { upload, uploading } = useFileUpload();
+  const { setChatState, clearChatState } = useHelpChat();
 
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,6 +47,17 @@ export default function ModelPage() {
 
   const [showNoRefsConfirm, setShowNoRefsConfirm] = useState(false);
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
+  const [referenceWarnings, setReferenceWarnings] = useState<string[]>([]);
+  const [chatWarningMessage, setChatWarningMessage] = useState<string>();
+  const [refinedNotes, setRefinedNotes] = useState<{ original: string; refined: string; question?: string }[]>([]);
+  const [editableRefinedNotes, setEditableRefinedNotes] = useState<string[]>([]);
+  const [showRefinedReview, setShowRefinedReview] = useState(false);
+  const [refining, setRefining] = useState(false);
+  const [clarificationContext, setClarificationContext] = useState<{
+    description: string;
+    notes: { index: number; original: string; refined: string; question: string; options?: string[]; imageUrl?: string }[];
+    availableImages?: { id: string; url: string }[];
+  } | undefined>(undefined);
 
   useEffect(() => {
     async function load() {
@@ -149,6 +161,27 @@ export default function ModelPage() {
     [params.projectId, notes]
   );
 
+  const handleAddFromLibrary = useCallback(
+    async (url: string) => {
+      const isExternal = url.startsWith("http") && !url.includes("supabase");
+      const res = await fetch(`/api/projects/${params.projectId}/assets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stage: 1,
+          asset_type: "face_moodboard",
+          source: "upload",
+          ...(isExternal ? { external_url: url } : { storage_path: url }),
+        }),
+      });
+      if (res.ok) {
+        const asset: ProjectAsset = await res.json();
+        setMoodboardAssets((prev) => [...prev, asset]);
+      }
+    },
+    [params.projectId]
+  );
+
   const handleRemoveMoodboardImage = useCallback(
     async (id: string) => {
       const res = await fetch(
@@ -184,6 +217,41 @@ export default function ModelPage() {
     [params.projectId, selectedMoodboardIds]
   );
 
+  // -- Chat note suggestions --
+
+  const handleNoteSuggestions = useCallback(
+    (updates: { index: number; refined: string }[]) => {
+      setEditableRefinedNotes((prev) => {
+        const next = [...prev];
+        for (const u of updates) {
+          if (u.index >= 0 && u.index < next.length) {
+            next[u.index] = u.refined;
+          }
+        }
+        return next;
+      });
+    },
+    []
+  );
+
+  const handleAlternativeSelected = useCallback(
+    (alt: { imageId: string; imageUrl: string; note: string }) => {
+      // Select the alternative image and add its note
+      setSelectedMoodboardIds((prev) => {
+        const next = new Set(prev);
+        next.add(alt.imageId);
+        fetch(`/api/projects/${params.projectId}/assets/${alt.imageId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ metadata: { note: alt.note, selected: true } }),
+        });
+        return next;
+      });
+      setNotes((prev) => ({ ...prev, [alt.imageId]: alt.note }));
+    },
+    [params.projectId]
+  );
+
   // -- Face generation --
 
   const getSelectedImageUrls = useCallback((): string[] => {
@@ -200,7 +268,121 @@ export default function ModelPage() {
       .join("\n");
   }, [moodboardAssets, selectedMoodboardIds, notes]);
 
-  const handleGenerateFace = useCallback(async () => {
+  const getSelectedImageNotesPerImage = useCallback((): { url: string; note: string }[] => {
+    return moodboardAssets
+      .filter((a) => selectedMoodboardIds.has(a.id))
+      .map((a) => ({
+        url: a.external_url ?? a.storage_path ?? "",
+        note: notes[a.id] ?? "",
+      }))
+      .filter((item) => item.url);
+  }, [moodboardAssets, selectedMoodboardIds, notes]);
+
+  const handleGenerateFace = useCallback(async (overridePrompt?: string, skip?: boolean) => {
+    setRefining(true);
+    setReferenceWarnings([]);
+    try {
+      const res = await fetch(
+        `/api/projects/${params.projectId}/stage/1/generate`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: overridePrompt || description,
+            imagePaths: getSelectedImageUrls(),
+            referenceNotes: getSelectedImageNotes(),
+            imageNotes: getSelectedImageNotesPerImage(),
+            skipCompletenessCheck: skip ?? false,
+            enhancedPrompt: overridePrompt || undefined,
+          }),
+        }
+      );
+      if (res.ok) {
+        const data = await res.json();
+
+        // Handle completeness check
+        if (data.needsClarification && data.clarificationType === "completeness-check") {
+          setRefining(false);
+          setChatState({
+            completenessCheck: {
+              stage: data.stage,
+              originalPrompt: data.originalPrompt,
+              questions: data.questions,
+              isMaskRefinement: false,
+            },
+            onEnhancedPromptConfirm: (enhancedPrompt: string) => {
+              clearChatState();
+              handleGenerateFace(enhancedPrompt, true);
+            },
+          });
+          return;
+        }
+
+        if (data.needsConfirmation) {
+          const notes = data.refinedNotes ?? [];
+          setRefinedNotes(notes);
+          setEditableRefinedNotes(notes.map((n: { refined: string }) => n.refined));
+          setShowRefinedReview(true);
+
+          // Build clarification context for questions
+          const selectedAssets = moodboardAssets.filter((a) => selectedMoodboardIds.has(a.id));
+          const questionsForChat = notes
+            .map((n: { original: string; refined: string; question?: string; options?: string[] }, i: number) => ({
+              index: i,
+              original: n.original,
+              refined: n.refined,
+              question: n.question,
+              options: n.options,
+              imageUrl: selectedAssets[i]
+                ? (selectedAssets[i].external_url ?? selectedAssets[i].storage_path ?? undefined)
+                : undefined,
+            }))
+            .filter((n: { question?: string }) => n.question);
+
+          // Unselected images the user can pick as alternatives
+          const unselectedImages = moodboardAssets
+            .filter((a) => !selectedMoodboardIds.has(a.id))
+            .map((a) => ({ id: a.id, url: a.external_url ?? a.storage_path ?? "" }))
+            .filter((a) => a.url);
+
+          if (questionsForChat.length > 0) {
+            const ctx = {
+              description,
+              notes: questionsForChat,
+              availableImages: unselectedImages.length > 0 ? unselectedImages : undefined,
+            };
+            setClarificationContext(ctx);
+            setChatState({ clarification: ctx, onNoteSuggestions: handleNoteSuggestions, onAlternativeSelected: handleAlternativeSelected });
+          } else {
+            setClarificationContext(undefined);
+            clearChatState();
+          }
+
+          if (data.warnings?.length) {
+            setReferenceWarnings(data.warnings);
+            const warningText = `I noticed a potential issue with your generation setup:\n\n${data.warnings.join("\n\n")}\n\nCheck the refined notes below and adjust if needed. Let me know if you need help!`;
+            setChatWarningMessage(warningText);
+          }
+          setRefining(false);
+          return;
+        }
+        setRefining(false);
+        setGenerating(true);
+        setGenerateJobId((data as Job).id);
+      } else {
+        setRefining(false);
+      }
+    } catch {
+      setRefining(false);
+    }
+  }, [params.projectId, description, getSelectedImageUrls, getSelectedImageNotes, getSelectedImageNotesPerImage, handleNoteSuggestions, handleAlternativeSelected, setChatState, clearChatState, moodboardAssets, selectedMoodboardIds]);
+
+  const handleConfirmRefinedNotes = useCallback(async (overridePrompt?: string, skip?: boolean) => {
+    setShowRefinedReview(false);
+    setReferenceWarnings([]);
+    setChatWarningMessage(undefined);
+    setClarificationContext(undefined);
+    clearChatState();
     setGenerating(true);
     try {
       const res = await fetch(
@@ -209,22 +391,41 @@ export default function ModelPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            prompt: description,
+            prompt: overridePrompt || description,
             imagePaths: getSelectedImageUrls(),
             referenceNotes: getSelectedImageNotes(),
+            confirmedNotes: editableRefinedNotes,
+            skipCompletenessCheck: skip ?? false,
+            enhancedPrompt: overridePrompt || undefined,
           }),
         }
       );
       if (res.ok) {
-        const job: Job = await res.json();
-        setGenerateJobId(job.id);
+        const data = await res.json();
+        if (data.needsClarification && data.clarificationType === "completeness-check") {
+          setGenerating(false);
+          setChatState({
+            completenessCheck: {
+              stage: data.stage,
+              originalPrompt: data.originalPrompt,
+              questions: data.questions,
+              isMaskRefinement: false,
+            },
+            onEnhancedPromptConfirm: (enhancedPrompt: string) => {
+              clearChatState();
+              handleConfirmRefinedNotes(enhancedPrompt, true);
+            },
+          });
+          return;
+        }
+        setGenerateJobId((data as Job).id);
       } else {
         setGenerating(false);
       }
     } catch {
       setGenerating(false);
     }
-  }, [params.projectId, description, getSelectedImageUrls]);
+  }, [params.projectId, description, getSelectedImageUrls, getSelectedImageNotes, editableRefinedNotes, clearChatState, setChatState]);
 
   const handleGenerateComplete = useCallback(
     async (job: Job) => {
@@ -275,9 +476,8 @@ export default function ModelPage() {
 
   return (
     <StageGate currentStage={project.current_stage} requiredStage={1}>
-      <div className="flex h-full overflow-hidden">
-        <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl space-y-6 px-6 py-4">
+      <div className="h-full overflow-y-auto">
+        <div className="mx-auto max-w-3xl space-y-6 px-6 py-4">
             {/* Title */}
             <div>
               <h2 className="text-lg font-semibold tracking-tight">
@@ -302,66 +502,101 @@ export default function ModelPage() {
               />
             </div>
 
-            {/* Moodboard */}
-            <MoodboardStrip images={moodboardGridImages} />
-
-            <MoodboardBrowser
-              images={moodboardGridImages}
-              onAddFromPinterest={handleAddPinterestImage}
-              onUpload={handleUploadMoodboardImage}
-              onToggleSelect={handleToggleMoodboardSelect}
-              onRemove={handleRemoveMoodboardImage}
-              onNoteChange={handleNoteChange}
-              projectDescription={description || undefined}
-              uploading={uploading}
-            />
-
-            {/* Selected references with notes */}
-            {selectedMoodboardIds.size > 0 && (
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-muted-foreground">
-                  {selectedMoodboardIds.size} reference
-                  {selectedMoodboardIds.size !== 1 ? "s" : ""} selected
-                </p>
+            {/* Reference images */}
+            {moodboardAssets.length > 0 && (
+              <div className="space-y-3" data-tour="model-moodboard">
+                <div className="flex items-center justify-between">
+                  <Label>
+                    Reference Images
+                    {selectedMoodboardIds.size > 0 && (
+                      <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                        {selectedMoodboardIds.size} selected
+                      </span>
+                    )}
+                  </Label>
+                  <MoodboardBrowser
+                    images={moodboardGridImages}
+                    onAddFromPinterest={handleAddPinterestImage}
+                    onAddFromLibrary={handleAddFromLibrary}
+                    onUpload={handleUploadMoodboardImage}
+                    onToggleSelect={handleToggleMoodboardSelect}
+                    onRemove={handleRemoveMoodboardImage}
+                    onNoteChange={handleNoteChange}
+                    projectDescription={description || undefined}
+                    uploading={uploading}
+                    libraryCategory="model"
+                  />
+                </div>
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                  {moodboardAssets
-                    .filter((a) => selectedMoodboardIds.has(a.id))
-                    .map((a) => {
-                      const url = a.external_url ?? a.storage_path ?? "";
-                      return (
-                        <div key={a.id} className="space-y-2">
-                          <div className="relative overflow-hidden rounded-lg border-2 border-blue-500 ring-2 ring-blue-500/20">
-                            <img
-                              src={url}
-                              alt="Selected reference"
-                              className="aspect-square w-full object-cover"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleToggleMoodboardSelect(a.id)}
-                              className="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full border-2 border-blue-500 bg-blue-500 text-white transition-colors hover:bg-blue-600"
-                            >
-                              <X className="size-3.5" />
-                            </button>
+                  {moodboardAssets.map((a) => {
+                    const url = a.external_url ?? a.storage_path ?? "";
+                    const isSelected = selectedMoodboardIds.has(a.id);
+                    return (
+                      <div key={a.id} className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleMoodboardSelect(a.id)}
+                          className={cn(
+                            "relative w-full overflow-hidden rounded-lg border-2 transition-colors",
+                            isSelected
+                              ? "border-blue-500 ring-2 ring-blue-500/20"
+                              : "border-border hover:border-muted-foreground/40"
+                          )}
+                        >
+                          <img
+                            src={url}
+                            alt="Reference"
+                            className="aspect-square w-full object-cover"
+                          />
+                          <div
+                            className={cn(
+                              "absolute left-2 top-2 flex size-6 items-center justify-center rounded-full border-2 transition-colors",
+                              isSelected
+                                ? "border-blue-500 bg-blue-500 text-white"
+                                : "border-white/70 bg-black/30 text-transparent"
+                            )}
+                          >
+                            <Check className="size-3.5" />
                           </div>
+                        </button>
+                        {isSelected && (
                           <input
                             type="text"
                             value={notes[a.id] ?? ""}
                             onChange={(e) =>
                               handleNoteChange(a.id, e.target.value)
                             }
-                            placeholder="What do you like? e.g. &quot;the freckles&quot;"
+                            placeholder="e.g. &quot;I want his freckles&quot;"
                             className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500/30"
                           />
-                        </div>
-                      );
-                    })}
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
+              </div>
+            )}
+
+            {moodboardAssets.length === 0 && (
+              <div data-tour="model-moodboard">
+              <MoodboardBrowser
+                images={moodboardGridImages}
+                onAddFromPinterest={handleAddPinterestImage}
+                onAddFromLibrary={handleAddFromLibrary}
+                onUpload={handleUploadMoodboardImage}
+                onToggleSelect={handleToggleMoodboardSelect}
+                onRemove={handleRemoveMoodboardImage}
+                onNoteChange={handleNoteChange}
+                projectDescription={description || undefined}
+                uploading={uploading}
+                libraryCategory="model"
+              />
               </div>
             )}
 
             {/* Generate button */}
             <Button
+              data-tour="model-generate"
               onClick={() => {
                 if (faceGenerated) {
                   setShowRegenerateConfirm(true);
@@ -374,10 +609,15 @@ export default function ModelPage() {
                   handleGenerateFace();
                 }
               }}
-              disabled={generating || !description.trim() || uploading}
+              disabled={generating || refining || !description.trim() || uploading}
               className="w-full py-6 text-base"
             >
-              {generating ? (
+              {refining ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Analyzing references...
+                </>
+              ) : generating ? (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin" />
                   Generating...
@@ -465,6 +705,68 @@ export default function ModelPage() {
               </DialogContent>
             </Dialog>
 
+            {/* Refined notes review */}
+            {showRefinedReview && refinedNotes.length > 0 && (
+              <div className="rounded-lg border border-border bg-card/50 p-4 space-y-4">
+                <div>
+                  <h3 className="text-sm font-semibold">Review refined reference notes</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    We analyzed your reference images and refined your notes into specific trait descriptions. Review and edit before generating.
+                  </p>
+                </div>
+
+                {referenceWarnings.length > 0 && (
+                  <div className="rounded-md border border-yellow-500/30 bg-yellow-500/5 px-3 py-2">
+                    <p className="text-xs font-medium text-yellow-400">
+                      Potential conflict detected — check the chat for details
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  {refinedNotes.map((note, i) => (
+                    <div key={i} className="space-y-1.5">
+                      <p className="text-xs text-muted-foreground">
+                        Your note: <span className="italic">&quot;{note.original}&quot;</span>
+                      </p>
+                      <Textarea
+                        value={editableRefinedNotes[i] ?? ""}
+                        onChange={(e) => {
+                          const updated = [...editableRefinedNotes];
+                          updated[i] = e.target.value;
+                          setEditableRefinedNotes(updated);
+                        }}
+                        rows={2}
+                        className="text-sm"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setShowRefinedReview(false);
+                      setReferenceWarnings([]);
+                      setChatWarningMessage(undefined);
+                      setClarificationContext(undefined);
+                      clearChatState();
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => handleConfirmRefinedNotes()}
+                  >
+                    Confirm &amp; Generate
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {generateJobId && (
               <JobStatus
                 jobId={generateJobId}
@@ -501,9 +803,6 @@ export default function ModelPage() {
             )}
           </div>
         </div>
-
-        <HelpChat context="model-generation" />
-      </div>
     </StageGate>
   );
 }

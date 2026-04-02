@@ -4,6 +4,7 @@ import Image from "next/image";
 import { X, Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { cn } from "@/lib/utils";
 import type { ProjectAsset } from "@/types";
 
@@ -72,13 +73,25 @@ export function AssetGrid({
             }}
           >
             {imageUrl && (
-              <Image
-                src={imageUrl}
-                alt={asset.role ?? "Project asset"}
-                fill
-                className="object-cover"
-                sizes="(max-width: 768px) 50vw, 25vw"
-              />
+              !selectable ? (
+                <ImageLightbox src={imageUrl} className="absolute inset-0 h-full w-full">
+                  <Image
+                    src={imageUrl}
+                    alt={asset.role ?? "Project asset"}
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 768px) 50vw, 25vw"
+                  />
+                </ImageLightbox>
+              ) : (
+                <Image
+                  src={imageUrl}
+                  alt={asset.role ?? "Project asset"}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 768px) 50vw, 25vw"
+                />
+              )
             )}
 
             {selectable && (

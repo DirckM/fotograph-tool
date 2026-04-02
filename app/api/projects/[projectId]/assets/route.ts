@@ -10,8 +10,11 @@ export async function GET(
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
+    console.error("[assets GET] No authenticated user found");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  console.log("[assets GET] user:", user.id, "project:", projectId);
 
   const url = new URL(request.url);
   const stage = url.searchParams.get("stage");
@@ -31,9 +34,11 @@ export async function GET(
   const { data: assets, error } = await query;
 
   if (error) {
+    console.error("[assets GET] Supabase error:", JSON.stringify(error));
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  console.log("[assets GET] returned", assets?.length, "assets");
   return NextResponse.json(assets);
 }
 

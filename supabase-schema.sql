@@ -6,6 +6,7 @@ create table if not exists profiles (
   id uuid references auth.users on delete cascade primary key,
   display_name text,
   avatar_url text,
+  onboarding_completed boolean default false,
   created_at timestamptz default now()
 );
 
@@ -128,7 +129,7 @@ create table if not exists project_assets (
   role text,
   storage_path text,
   external_url text,
-  source text not null check (source in ('upload', 'pinterest', 'gemini')),
+  source text not null check (source in ('upload', 'pinterest', 'gemini', 'library')),
   metadata jsonb default '{}'::jsonb,
   sort_order int default 0,
   created_at timestamptz default now()

@@ -2,17 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Upload, ArrowRight, FileText, X } from "lucide-react";
+import { ArrowRight, FileText, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ImageUpload } from "@/components/image-upload";
+import { StageLayout } from "@/components/projects/stage-layout";
 import { useFileUpload } from "@/lib/hooks";
 import type { Project, ProjectAsset, ProjectStageState } from "@/types";
 
@@ -134,38 +129,11 @@ export default function ContextPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold tracking-tight">
-          Stage 0: Context
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Provide the project brief and upload any reference documents or images.
-        </p>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <FileText className="h-4 w-4" />
-            Project Brief
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="context-text">
-              Description / Employer Brief
-            </Label>
-            <Textarea
-              id="context-text"
-              placeholder="Describe the project goals, brand guidelines, target audience, desired style, and any other relevant context..."
-              value={contextText}
-              onChange={(e) => setContextText(e.target.value)}
-              rows={6}
-              className="resize-y"
-            />
-          </div>
-
+    <StageLayout
+      title={<>Stage 0: <span className="text-heading">Context</span> Briefing</>}
+      description="Provide the project brief and upload any reference documents or images."
+      aside={
+        <>
           <div className="space-y-3">
             <Label>Reference Documents & Images</Label>
             <ImageUpload
@@ -224,19 +192,32 @@ export default function ContextPage() {
               </ul>
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      <div className="flex justify-end">
+        </>
+      }
+      footer={
         <Button
           size="lg"
           onClick={handleSaveAndContinue}
           disabled={saving || uploading || !contextText.trim()}
+          data-tour="context-save"
         >
           {saving ? "Saving..." : "Save & Continue"}
           {!saving && <ArrowRight className="ml-2 h-4 w-4" />}
         </Button>
+      }
+    >
+      <div className="flex flex-1 flex-col space-y-2">
+        <Label htmlFor="context-text">
+          Description / Employer Brief
+        </Label>
+        <Textarea
+          id="context-text"
+          placeholder="Describe the project goals, brand guidelines, target audience, desired style, and any other relevant context..."
+          value={contextText}
+          onChange={(e) => setContextText(e.target.value)}
+          className="h-full resize-none"
+        />
       </div>
-    </div>
+    </StageLayout>
   );
 }

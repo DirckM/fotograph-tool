@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
-import { Layers, Loader2, CheckCircle2 } from "lucide-react";
+import { Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import { JobStatus } from "@/components/job-status";
 import { AssetGrid } from "@/components/projects/asset-grid";
 import { StageGate } from "@/components/projects/stage-gate";
+import { StageLayout } from "@/components/projects/stage-layout";
+import { useHelpChat } from "@/components/projects/help-chat-context";
 import type { Project, ProjectAsset, Job } from "@/types";
 
 const STAGE_LABELS: Record<number, string> = {
@@ -25,6 +27,7 @@ function getImageUrl(asset: ProjectAsset): string | null {
 export default function FinalStagePage() {
   const { projectId } = useParams<{ projectId: string }>();
   const router = useRouter();
+  const { setChatState, clearChatState } = useHelpChat();
 
   const [project, setProject] = useState<Project | null>(null);
   const [allAssets, setAllAssets] = useState<ProjectAsset[]>([]);
@@ -62,7 +65,7 @@ export default function FinalStagePage() {
     (a) => a.stage === 5 && a.asset_type === "final_composite"
   );
 
-  const handleGenerate = useCallback(async () => {
+  const handleGenerate = useCallback(async (overridePrompt?: string, skip?: boolean) => {
     if (!project) return;
 
     setGenerating(true);
@@ -80,22 +83,40 @@ export default function FinalStagePage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            prompt: project.description ?? project.name,
+            prompt: overridePrompt || project.description || project.name,
             imagePaths,
+            skipCompletenessCheck: skip ?? false,
+            enhancedPrompt: overridePrompt || undefined,
           }),
         }
       );
 
       if (res.ok) {
-        const job = await res.json();
-        setJobId(job.id);
+        const data = await res.json();
+        if (data.needsClarification && data.clarificationType === "completeness-check") {
+          setGenerating(false);
+          setChatState({
+            completenessCheck: {
+              stage: data.stage,
+              originalPrompt: data.originalPrompt,
+              questions: data.questions,
+              isMaskRefinement: false,
+            },
+            onEnhancedPromptConfirm: (enhancedPrompt: string) => {
+              clearChatState();
+              handleGenerate(enhancedPrompt, true);
+            },
+          });
+          return;
+        }
+        setJobId(data.id);
       } else {
         setGenerating(false);
       }
     } catch {
       setGenerating(false);
     }
-  }, [project, projectId, allAssets]);
+  }, [project, projectId, allAssets, setChatState, clearChatState]);
 
   const handleJobComplete = useCallback(
     async (job: Job) => {
@@ -152,104 +173,94 @@ export default function FinalStagePage() {
 
   return (
     <StageGate currentStage={project.current_stage} requiredStage={5}>
-      <div className="flex flex-col gap-6">
-        <div>
-          <h1 className="flex items-center gap-2 text-2xl font-medium">
-            <Layers className="h-5 w-5" />
-            Final <span className="font-serif">Construction</span>
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Combine all approved assets into final composite images.
-          </p>
-        </div>
+      <StageLayout
+        title={<>Stage 5: <span className="text-heading">Final</span> Compositing</>}
+        description="Combine all approved assets into final composite images."
+        aside={
+          <div className="space-y-4">
+            <div className="space-y-3">
+              <Label>Generation</Label>
+              <Button
+                className="w-full"
+                onClick={() => handleGenerate()}
+                disabled={generating}
+                data-tour="final-generate"
+              >
+                {generating ? "Generating..." : "Generate Series"}
+              </Button>
+              <JobStatus jobId={jobId} onComplete={handleJobComplete} />
+            </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[1, 2, 3, 4].map((stage) => {
-            const stageAssets = assetsByStage(stage);
-            return (
-              <Card key={stage}>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    {STAGE_LABELS[stage]}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {stageAssets.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                      No assets
-                    </p>
-                  ) : (
-                    <div className="grid grid-cols-3 gap-1">
-                      {stageAssets.slice(0, 6).map((asset) => {
-                        const url = getImageUrl(asset);
-                        return url ? (
-                          <div
-                            key={asset.id}
-                            className="relative aspect-square overflow-hidden rounded"
-                          >
-                            <Image
-                              src={url}
-                              alt={asset.role ?? STAGE_LABELS[stage]}
-                              fill
-                              className="object-cover"
-                              sizes="80px"
-                            />
-                          </div>
-                        ) : null;
-                      })}
-                    </div>
-                  )}
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {stageAssets.length} asset{stageAssets.length !== 1 && "s"}
-                  </p>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Generate Composites</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button
-              onClick={handleGenerate}
-              disabled={generating}
-            >
-              {generating ? "Generating..." : "Generate Series"}
-            </Button>
-
-            <JobStatus jobId={jobId} onComplete={handleJobComplete} />
-          </CardContent>
-        </Card>
-
-        {composites.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">
-                Final Composites ({composites.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AssetGrid assets={composites} columns={3} />
-            </CardContent>
-          </Card>
-        )}
-
-        {composites.length > 0 && (
-          <div className="flex justify-end">
-            <Button
-              size="lg"
-              onClick={handleComplete}
-              disabled={completing}
-            >
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-              {completing ? "Completing..." : "Complete Project"}
-            </Button>
+            {composites.length > 0 && (
+              <div className="space-y-3 pt-4 border-t border-border/50">
+                <Label>Project</Label>
+                <Button
+                  size="lg"
+                  className="w-full"
+                  onClick={handleComplete}
+                  disabled={completing}
+                >
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  {completing ? "Completing..." : "Complete Project"}
+                </Button>
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        }
+      >
+        <div className="space-y-6 overflow-y-auto">
+          <div className="space-y-3">
+            <Label className="text-sm text-muted-foreground" data-tour="final-assets">Asset Summary</Label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {[1, 2, 3, 4].map((stage) => {
+                const stageAssets = assetsByStage(stage);
+                return (
+                  <div key={stage} className="space-y-2 rounded-lg border border-border/50 p-3">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      {STAGE_LABELS[stage]}
+                    </p>
+                    {stageAssets.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No assets</p>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-1">
+                        {stageAssets.slice(0, 6).map((asset) => {
+                          const url = getImageUrl(asset);
+                          return url ? (
+                            <div
+                              key={asset.id}
+                              className="relative aspect-square overflow-hidden rounded"
+                            >
+                              <Image
+                                src={url}
+                                alt={asset.role ?? STAGE_LABELS[stage]}
+                                fill
+                                className="object-cover"
+                                sizes="80px"
+                              />
+                            </div>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {stageAssets.length} asset{stageAssets.length !== 1 && "s"}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {composites.length > 0 && (
+            <div className="space-y-3">
+              <Label className="text-sm text-muted-foreground">
+                Final Composites ({composites.length})
+              </Label>
+              <AssetGrid assets={composites} columns={3} />
+            </div>
+          )}
+        </div>
+      </StageLayout>
     </StageGate>
   );
 }

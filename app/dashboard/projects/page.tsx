@@ -4,6 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ProjectCard } from "@/components/projects/project-card";
 import type { Project } from "@/types";
 
@@ -11,6 +19,8 @@ export default function ProjectsPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -26,8 +36,24 @@ export default function ProjectsPage() {
     load();
   }, []);
 
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/projects/${deleteTarget.id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setProjects((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+      }
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6 lg:p-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
@@ -71,10 +97,45 @@ export default function ProjectsPage() {
               onClick={() =>
                 router.push(`/dashboard/projects/${project.id}`)
               }
+              onDelete={() => setDeleteTarget(project)}
             />
           ))}
         </div>
       )}
+
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete project</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete{" "}
+              <strong>{deleteTarget?.name}</strong>? This action cannot be
+              undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

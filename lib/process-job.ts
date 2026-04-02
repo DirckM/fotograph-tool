@@ -1,7 +1,48 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateWithImages } from "@/lib/gemini";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { JobFeature } from "@/types";
+
+export async function fetchImages(
+  paths: string[],
+  supabase: SupabaseClient
+): Promise<{ mimeType: string; data: string }[]> {
+  return Promise.all(
+    paths.map(async (path) => {
+      let buffer: Buffer;
+      let mimeType: string;
+
+      if (path.startsWith("data:")) {
+        const match = path.match(/^data:([^;]+);base64,(.+)$/);
+        if (!match) throw new Error("Invalid data URL");
+        mimeType = match[1];
+        buffer = Buffer.from(match[2], "base64");
+      } else if (path.startsWith("https://") || path.startsWith("http://")) {
+        const res = await fetch(path);
+        if (!res.ok) throw new Error(`Failed to fetch image: ${path}`);
+        buffer = Buffer.from(await res.arrayBuffer());
+        mimeType = res.headers.get("content-type") || "image/png";
+      } else {
+        const { data, error } = await supabase.storage
+          .from("project-assets")
+          .download(path);
+
+        if (error || !data) {
+          throw new Error(`Failed to download image: ${path}`);
+        }
+
+        buffer = Buffer.from(await data.arrayBuffer());
+        mimeType = data.type || "image/png";
+      }
+
+      return {
+        mimeType,
+        data: buffer.toString("base64"),
+      };
+    })
+  );
+}
 
 interface ProcessJobParams {
   userId: string;
@@ -46,40 +87,7 @@ export async function processJob({
   }
 
   try {
-    const images = await Promise.all(
-      imagePaths.map(async (path) => {
-        let buffer: Buffer;
-        let mimeType: string;
-
-        if (path.startsWith("data:")) {
-          const match = path.match(/^data:([^;]+);base64,(.+)$/);
-          if (!match) throw new Error("Invalid data URL");
-          mimeType = match[1];
-          buffer = Buffer.from(match[2], "base64");
-        } else if (path.startsWith("https://") || path.startsWith("http://")) {
-          const res = await fetch(path);
-          if (!res.ok) throw new Error(`Failed to fetch image: ${path}`);
-          buffer = Buffer.from(await res.arrayBuffer());
-          mimeType = res.headers.get("content-type") || "image/png";
-        } else {
-          const { data, error } = await supabase.storage
-            .from("project-assets")
-            .download(path);
-
-          if (error || !data) {
-            throw new Error(`Failed to download image: ${path}`);
-          }
-
-          buffer = Buffer.from(await data.arrayBuffer());
-          mimeType = data.type || "image/png";
-        }
-
-        return {
-          mimeType,
-          data: buffer.toString("base64"),
-        };
-      })
-    );
+    const images = await fetchImages(imagePaths, supabase);
 
     const result = await generateWithImages(images, prompt, model);
 

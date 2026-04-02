@@ -18,6 +18,16 @@ export default function LoginPage() {
     setLoading(true);
     setMessage("");
 
+    const allowed = [
+      "mickdelint@gmail.com",
+      "dirckmulder20@gmail.com",
+    ];
+    if (!allowed.includes(email.toLowerCase().trim())) {
+      setMessage("Access denied. This app is invite-only.");
+      setLoading(false);
+      return;
+    }
+
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOtp({
       email,

@@ -1,10 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { X, ExternalLink, Upload, ImageIcon } from "lucide-react";
+import { X, ExternalLink, Upload, ImageIcon, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface LibraryAsset {
   id: string;
@@ -13,7 +22,7 @@ interface LibraryAsset {
   external_url: string | null;
   source: "upload" | "pinterest" | "gemini";
   created_at: string;
-  project_id: string;
+  project_id: string | null;
   project_name: string | null;
 }
 
@@ -33,6 +42,13 @@ const ASSET_TYPE_LABELS: Record<string, string> = {
   garment_image: "Garment",
 };
 
+const IMPORT_CATEGORIES = [
+  { key: "face_moodboard", label: "Model" },
+  { key: "env_moodboard", label: "Environment" },
+  { key: "pose_moodboard", label: "Pose" },
+  { key: "garment_image", label: "Garment" },
+] as const;
+
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString("en-US", {
     month: "short",
@@ -50,6 +66,10 @@ export default function MoodboardLibraryPage() {
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("all");
   const [selectedAsset, setSelectedAsset] = useState<LibraryAsset | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importCategory, setImportCategory] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -58,6 +78,48 @@ export default function MoodboardLibraryPage() {
       .then((data) => setAssets(data.assets ?? []))
       .finally(() => setLoading(false));
   }, []);
+
+  const handleImport = useCallback(async (files: FileList) => {
+    if (!importCategory || files.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const form = new FormData();
+        form.append("file", file);
+        const uploadRes = await fetch("/api/upload", { method: "POST", body: form });
+        if (!uploadRes.ok) continue;
+        const { publicUrl } = await uploadRes.json();
+
+        const assetRes = await fetch("/api/moodboard/library", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            asset_type: importCategory,
+            storage_path: publicUrl,
+          }),
+        });
+        if (!assetRes.ok) continue;
+        const asset = await assetRes.json();
+        setAssets((prev) => [
+          {
+            id: asset.id,
+            asset_type: asset.asset_type,
+            storage_path: asset.storage_path,
+            external_url: asset.external_url,
+            source: asset.source,
+            created_at: asset.created_at,
+            project_id: null,
+            project_name: null,
+          },
+          ...prev,
+        ]);
+      }
+    } finally {
+      setUploading(false);
+      setImportOpen(false);
+      setImportCategory(null);
+    }
+  }, [importCategory]);
 
   const filtered =
     activeCategory === "all"
@@ -72,17 +134,23 @@ export default function MoodboardLibraryPage() {
           return (map[activeCategory] ?? []).includes(a.asset_type);
         });
 
-  const projectCount = new Set(assets.map((a) => a.project_id)).size;
+  const projectCount = new Set(assets.map((a) => a.project_id).filter(Boolean)).size;
 
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="shrink-0 border-b border-border px-6 py-5">
-        <h1 className="text-xl font-semibold tracking-tight">Moodboard</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {assets.length} {assets.length === 1 ? "image" : "images"} across{" "}
-          {projectCount} {projectCount === 1 ? "project" : "projects"}
-        </p>
+      <div className="flex shrink-0 items-start justify-between border-b border-border px-6 py-5">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Moodboard</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {assets.length} {assets.length === 1 ? "image" : "images"} across{" "}
+            {projectCount} {projectCount === 1 ? "project" : "projects"}
+          </p>
+        </div>
+        <Button onClick={() => setImportOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Import
+        </Button>
       </div>
 
       {/* Filter pills */}
@@ -187,13 +255,19 @@ export default function MoodboardLibraryPage() {
                   <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
                     Project
                   </span>
-                  <Link
-                    href={`/dashboard/projects/${selectedAsset.project_id}`}
-                    className="mt-0.5 flex items-center gap-1.5 text-sm font-medium text-foreground transition-colors hover:text-primary"
-                  >
-                    {selectedAsset.project_name ?? "Unknown project"}
-                    <ExternalLink className="h-3 w-3" />
-                  </Link>
+                  {selectedAsset.project_id ? (
+                    <Link
+                      href={`/dashboard/projects/${selectedAsset.project_id}`}
+                      className="mt-0.5 flex items-center gap-1.5 text-sm font-medium text-foreground transition-colors hover:text-primary"
+                    >
+                      {selectedAsset.project_name ?? "Unknown project"}
+                      <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  ) : (
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      Deleted project
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -232,6 +306,71 @@ export default function MoodboardLibraryPage() {
           </div>
         )}
       </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files) handleImport(e.target.files);
+          e.target.value = "";
+        }}
+      />
+
+      <Dialog
+        open={importOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setImportOpen(false);
+            setImportCategory(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Import to moodboard</DialogTitle>
+            <DialogDescription>
+              Select a category for the images you want to import.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-2">
+            {IMPORT_CATEGORIES.map((cat) => (
+              <button
+                key={cat.key}
+                type="button"
+                onClick={() => setImportCategory(cat.key)}
+                className={cn(
+                  "rounded-lg border-2 px-4 py-3 text-sm font-medium transition-colors",
+                  importCategory === cat.key
+                    ? "border-primary bg-primary/5 text-foreground"
+                    : "border-border text-muted-foreground hover:border-foreground/20 hover:text-foreground"
+                )}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setImportOpen(false);
+                setImportCategory(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={!importCategory || uploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploading ? "Uploading..." : "Choose files"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

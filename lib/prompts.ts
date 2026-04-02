@@ -99,11 +99,21 @@ Requirements:
 
 export function modelGenerationPrompt(
   description: string,
-  hasMoodboard: boolean
+  hasMoodboard: boolean,
+  referenceNotes?: string
 ): string {
-  const moodboardInstruction = hasMoodboard
-    ? "Use the provided reference/moodboard images as visual inspiration for the model's appearance. Synthesize the best qualities from the references into a single coherent identity."
-    : "";
+  let moodboardInstruction = "";
+
+  if (hasMoodboard) {
+    moodboardInstruction = referenceNotes
+      ? `Reference images are provided. DO NOT copy any reference face as-is. Instead, only extract the specific traits noted below and apply them to a NEW face matching the description above.
+
+Per-reference notes (each note describes what to extract from the corresponding image):
+${referenceNotes}
+
+IMPORTANT: The description above defines the identity (gender, age, ethnicity, hair, eyes, etc). The reference images are ONLY for borrowing specific visual traits mentioned in the notes — ignore everything else about the reference faces.`
+      : `Reference images are provided as general visual inspiration for qualities like skin texture, lighting style, and facial proportions. DO NOT copy any reference face — generate a NEW face that matches the description above.`;
+  }
 
   return `Generate a photorealistic portrait of a fashion model with the following description:
 
@@ -113,6 +123,7 @@ ${moodboardInstruction}
 
 Requirements:
 - The result must be a single, consistent human identity
+- The description above is the source of truth for the model's identity
 - Photorealistic quality suitable for professional fashion photography
 - Clean, well-lit studio portrait style
 - Sharp facial features with natural skin texture
@@ -150,15 +161,18 @@ export function poseGenerationPrompt(
     ? "Use the provided reference images as visual inspiration for the pose."
     : "";
 
-  return `Generate a black and white silhouette/pose reference showing:
+  return `Generate a neutral gray-toned mannequin figure showing the following pose:
 
 ${description}
 
 ${moodboardInstruction}
 
 Requirements:
-- Clean black silhouette on white background
-- Clear body pose with visible limbs and joints
+- Featureless mannequin figure with smooth gray skin and visible form/shading
+- No facial features, hair, or clothing — just a neutral humanoid form
+- Clean white background
+- Visible depth and volume through light and shadow on the body
+- Clear body pose with distinct limb positions and joint angles
 - Natural, anatomically correct pose
 - Fashion/editorial style posing
 - Full body visible from head to toe`;
@@ -172,7 +186,7 @@ export function finalCompositePrompt(
 The images provided are (in order):
 1. Model face reference(s)
 2. Environment/setting
-3. Pose reference (silhouette)
+3. Pose reference (mannequin figure showing body position and depth)
 4. Garment/clothing reference(s)
 
 Project context: ${projectDescription}
@@ -186,6 +200,134 @@ Requirements:
 - The garment should drape naturally on the posed body
 - The final result must look like a real professional photograph
 - Perspective alignment between all elements must be seamless`;
+}
+
+const stageNames: Record<number, string> = {
+  1: "model (face/portrait)",
+  2: "environment (background/setting)",
+  3: "pose (body posture/mannequin)",
+  5: "final composite (all elements combined)",
+};
+
+const stageConcerns: Record<number, string> = {
+  1: `- Facial features: eye shape, eye color, gaze direction, eyebrow thickness/arch
+- Skin: texture, freckles, moles, pores, complexion
+- Hair: exact color tone, length, parting, texture (curly/wavy/straight), volume
+- Expression: mouth position (slightly open, closed, smiling), teeth visibility
+- Face shape: jawline, cheekbone prominence, chin shape
+- Lighting on face: catch light position, shadow side, highlight placement`,
+  2: `- Lighting: direction (front/side/back), color temperature (warm/cool), intensity, hard vs soft shadows
+- Time of day: specific hour affects sun angle and color
+- Depth of field: sharp background or blurred
+- Surface materials: exact textures (polished marble vs rough stone, glossy vs matte)
+- Atmosphere: haze, fog, dust particles, clean air
+- Color palette: dominant and accent colors
+- Scale: how large the space feels relative to a person`,
+  3: `- Hand positioning: fingers spread/together/curled, palm direction, grip
+- Weight distribution: which leg bears weight, hip tilt
+- Spine curvature: straight/slouched/arched
+- Head tilt and rotation: degrees of turn, chin up/down
+- Arm angles: bent/straight, distance from body
+- Shoulder alignment: level/dropped/raised
+- Foot placement: together/apart, angle, pointing direction`,
+  5: `- Color grading consistency between model and environment
+- Shadow direction matching between all elements
+- Scale/proportion of model relative to environment
+- Perspective alignment between pose and camera angle
+- Garment fit and drape on the posed body
+- Edge blending between composited elements
+- Overall lighting coherence across all layers`,
+};
+
+export function completenessCheckPrompt(
+  stageNum: number,
+  userPrompt: string,
+  isMaskRefinement: boolean,
+  imageDescriptions?: string[]
+): string {
+  const stageName = stageNames[stageNum] ?? "unknown";
+  const concerns = stageConcerns[stageNum] ?? "";
+
+  const imageContext = imageDescriptions?.length
+    ? `\nReference images provided:\n${imageDescriptions.map((d, i) => `- Image ${i + 1}: ${d}`).join("\n")}`
+    : "";
+
+  if (isMaskRefinement) {
+    return `You are analyzing a mask refinement instruction for a ${stageName} image.
+
+The user has painted a mask on a specific region and wants to change it. Their instruction:
+"${userPrompt}"
+${imageContext}
+
+Your job: identify details the user has NOT specified that could lead to undesirable results. Image generation models commonly produce artifacts when details are left ambiguous.
+
+Stage-specific concerns for ${stageName}:
+${concerns}
+
+Respond with valid JSON only, no markdown:
+{
+  "complete": true/false,
+  "questions": ["question 1", "question 2", ...]
+}
+
+Rules:
+- Only flag genuinely ambiguous details that could produce visibly different results
+- Maximum 3 questions, each under 30 words
+- If the instruction is specific enough, return complete: true with empty questions
+- Focus on what the AI model will interpret differently without specification
+- Do NOT ask about things already specified in the prompt
+- Be practical, not pedantic — skip trivial details`;
+  }
+
+  return `You are analyzing a prompt for ${stageName} image generation.
+
+User's prompt:
+"${userPrompt}"
+${imageContext}
+
+Your job: identify details the user has NOT specified that could lead to undesirable results. Image generation models commonly produce artifacts when details are left ambiguous.
+
+Stage-specific concerns for ${stageName}:
+${concerns}
+
+Respond with valid JSON only, no markdown:
+{
+  "complete": true/false,
+  "questions": ["question 1", "question 2", ...]
+}
+
+Rules:
+- Only flag genuinely ambiguous details that could produce visibly different results
+- Maximum 3 questions, each under 30 words
+- If the prompt is specific enough, return complete: true with empty questions
+- Focus on what the AI model will interpret differently without specification
+- Do NOT ask about things already specified in the prompt
+- Be practical, not pedantic — skip trivial details`;
+}
+
+export function completenessCheckChatPrompt(
+  stageNum: number,
+  originalPrompt: string,
+  questions: string[],
+  isMaskRefinement: boolean
+): string {
+  const stageName = stageNames[stageNum] ?? "unknown";
+  const context = isMaskRefinement ? "mask refinement" : "generation";
+
+  return `You are helping a user refine their ${context} prompt for ${stageName}.
+
+Original prompt: "${originalPrompt}"
+
+Questions that were asked about unspecified details:
+${questions.map((q, i) => `${i + 1}. ${q}`).join("\n")}
+
+Based on the user's responses, create an enhanced version of their original prompt that incorporates all the specified details naturally. The enhanced prompt should read as a single coherent instruction, not a list of answers.
+
+You MUST respond with valid JSON only, no markdown:
+{
+  "message": "Short friendly summary of what you added to their prompt (1-2 sentences)",
+  "enhancedPrompt": "The complete enhanced prompt ready for generation"
+}`;
 }
 
 export function searchQuerySuggestionPrompt(

@@ -204,11 +204,11 @@ export default function FaceSwapPage() {
   const allSourcesUploaded = sourceImages.length > 0 && sourceImages.every((img) => img.path);
 
   return (
-    <div className="flex h-full flex-col gap-3">
+    <div className="flex h-full flex-col gap-3 p-6 lg:p-8">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-medium">
           <Users className="h-5 w-5" />
-          Face <span className="font-serif">Swap</span>
+          Face Swap
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Replace a face in a target image. Upload reference photos or generate missing perspective angles.
@@ -281,7 +281,7 @@ export default function FaceSwapPage() {
                   description="Any existing angle"
                   className="min-h-28"
                 />
-                <Select value={perspAngle} onValueChange={setPerspAngle}>
+                <Select value={perspAngle} onValueChange={(v) => v && setPerspAngle(v)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Angle to generate" />
                   </SelectTrigger>
@@ -335,7 +335,7 @@ export default function FaceSwapPage() {
 
             <div>
               <Label className="mb-1.5 block text-sm">Look direction</Label>
-              <Select value={lookDirection} onValueChange={setLookDirection}>
+              <Select value={lookDirection} onValueChange={(v) => v && setLookDirection(v)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -349,7 +349,7 @@ export default function FaceSwapPage() {
 
             <div>
               <Label className="mb-1.5 block text-sm">Clothing texture</Label>
-              <Select value={clothingTexture} onValueChange={setClothingTexture}>
+              <Select value={clothingTexture} onValueChange={(v) => v && setClothingTexture(v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="No change" />
                 </SelectTrigger>

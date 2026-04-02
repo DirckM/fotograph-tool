@@ -29,17 +29,28 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
+  const ALLOWED_EMAILS = [
+    "mickdelint@gmail.com",
+    "dirckmulder20@gmail.com",
+  ];
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (
-    !user &&
-    request.nextUrl.pathname.startsWith("/dashboard")
-  ) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
+  if (request.nextUrl.pathname.startsWith("/dashboard")) {
+    if (!user) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
+
+    if (!user.email || !ALLOWED_EMAILS.includes(user.email.toLowerCase())) {
+      await supabase.auth.signOut();
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;

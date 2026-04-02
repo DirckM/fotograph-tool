@@ -100,11 +100,11 @@ export default function TryOnPage() {
   }, [clearClothingPreview, clearPersonPreview]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6 lg:p-8">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-medium">
           <Shirt className="h-5 w-5" />
-          Virtual <span className="font-serif">Try-On</span>
+          Virtual Try-On
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           See how clothing looks on a person. Upload the garment and the model separately.

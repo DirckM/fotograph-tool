@@ -2,7 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from "react";
 import { ReactSketchCanvas } from "react-sketch-canvas";
-import { Undo2, Redo2, Eraser, Download } from "lucide-react";
+import { Undo2, Redo2, Eraser } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
@@ -20,9 +20,7 @@ export function MaskCanvas({ imageUrl, onExportMask, className }: MaskCanvasProp
 
   useEffect(() => {
     const img = new window.Image();
-    img.onload = () => {
-      setAspectRatio(img.naturalWidth / img.naturalHeight);
-    };
+    img.onload = () => setAspectRatio(img.naturalWidth / img.naturalHeight);
     img.src = imageUrl;
   }, [imageUrl]);
 
@@ -64,54 +62,64 @@ export function MaskCanvas({ imageUrl, onExportMask, className }: MaskCanvasProp
   }, [exportMask]);
 
   return (
-    <div className={cn("flex flex-col gap-3", className)}>
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground whitespace-nowrap">
-            Brush: {brushSize}px
-          </span>
+    <div className={cn("flex h-full min-h-0 flex-col gap-2", className)}>
+      <div className="flex shrink-0 flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <div
+            className="shrink-0 rounded-full bg-white"
+            style={{
+              width: Math.min(brushSize, 24),
+              height: Math.min(brushSize, 24),
+              transition: "width 100ms ease, height 100ms ease",
+            }}
+          />
           <Slider
             min={1}
             max={50}
             value={[brushSize]}
-            onValueChange={(val: number[]) => setBrushSize(val[0])}
-            className="w-32"
+            onValueChange={(val) => setBrushSize(Array.isArray(val) ? val[0] : val)}
+            className="w-40"
           />
         </div>
 
-        <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon-sm" onClick={handleUndo} title="Undo">
+        <div className="flex items-center gap-1.5">
+          <Button variant="outline" size="icon" onClick={handleUndo} title="Undo">
             <Undo2 />
           </Button>
-          <Button variant="outline" size="icon-sm" onClick={handleRedo} title="Redo">
+          <Button variant="outline" size="icon" onClick={handleRedo} title="Redo">
             <Redo2 />
           </Button>
-          <Button variant="outline" size="icon-sm" onClick={handleClear} title="Clear">
+          <Button variant="outline" size="icon" onClick={handleClear} title="Clear">
             <Eraser />
           </Button>
         </div>
-
-        <Button variant="secondary" size="sm" onClick={exportMask}>
-          <Download data-icon="inline-start" />
-          Export Mask
-        </Button>
       </div>
 
-      <div
-        className="relative w-full overflow-hidden rounded-lg border border-border"
-        style={aspectRatio ? { aspectRatio: `${aspectRatio}` } : undefined}
-      >
-        <ReactSketchCanvas
-          ref={canvasRef}
-          strokeWidth={brushSize}
-          strokeColor="white"
-          canvasColor="black"
-          backgroundImage={imageUrl}
-          exportWithBackgroundImage={false}
-          onStroke={handleStrokeEnd}
-          style={{ width: "100%", height: "100%" }}
-        />
-      </div>
+      {aspectRatio !== null ? (
+        <div
+          className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-border"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imageUrl}
+            alt=""
+            className="h-full w-full object-contain"
+          />
+          <ReactSketchCanvas
+            ref={canvasRef}
+            strokeWidth={brushSize}
+            strokeColor="rgba(255,255,255,0.9)"
+            canvasColor="transparent"
+            exportWithBackgroundImage={false}
+            onStroke={handleStrokeEnd}
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", background: "transparent" }}
+          />
+        </div>
+      ) : (
+        <div className="flex h-64 items-center justify-center rounded-lg border border-border">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        </div>
+      )}
     </div>
   );
 }

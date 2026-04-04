@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-04-04T13:28:34.031Z",
+  "function": "generateText",
+  "model": "gemini-2.5-flash",
+  "prompt": "You are analyzing a mask refinement instruction for a pose (body posture/mannequin) image.\n\nThe user has painted a mask on a specific region and wants to change it. Their instruction:\n\"Can you make the face better\"\n\n\nYour job: identify details the user has NOT specified that could lead to undesirable results. Image generation models commonly produce artifacts when details are left ambiguous.\n\nStage-specific concerns for pose (body posture/mannequin):\n- Hand positioning: fingers spread/together/curled, palm direction, grip\n- Weight distribution: which leg bears weight, hip tilt\n- Spine curvature: straight/slouched/arched\n- Head tilt and rotation: degrees of turn, chin up/down\n- Arm angles: bent/straight, distance from body\n- Shoulder alignment: level/dropped/raised\n- Foot placement: together/apart, angle, pointing direction\n\nRespond with valid JSON only, no markdown:\n{\n  \"complete\": true/false,\n  \"questions\": [\n    {\n      \"question\": \"Short question text\",\n      \"options\": [\"Option A\", \"Option B\", \"Option C\", \"Option D\"]\n    }\n  ]\n}\n\nRules:\n- Only flag genuinely ambiguous details that could produce visibly different results\n- Maximum 3 questions, each under 30 words\n- Each question MUST have 3-5 concrete options that are the most likely/common choices\n- Options should be short labels (1-4 words each)\n- If the prompt is specific enough, return complete: true with empty questions\n- Focus on what the AI model will interpret differently without specification\n- Do NOT ask about things already specified in the prompt\n- Be practical, not pedantic — skip trivial details",
+  "inputImages": [],
+  "output": {
+    "type": "text",
+    "text": "{\n  \"complete\": false,\n  \"questions\": [\n    {\n      \"question\": \"What kind of facial expression would be better?\",\n      \"options\": [\"Neutral\", \"Slight smile\", \"Confident\", \"Stronger expression\"]\n    },\n    {\n      \"question\": \"How should the head's orientation be adjusted?\",\n      \"options\": [\"Keep current angle\", \"Straighten forward\", \"Slightly tilt\", \"Turn left/right\"]\n    },\n    {\n      \"question\": \"What aspect of the face needs improvement?\",\n      \"options\": [\"More realistic\", \"Smoother features\", \"Sharper details\", \"Overall aesthetics\"]\n    }\n  ]\n}"
+  },
+  "durationMs": 7495
+}

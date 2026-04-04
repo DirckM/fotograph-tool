@@ -1,0 +1,12 @@
+{
+  "timestamp": "2026-04-04T13:35:53.202Z",
+  "function": "generateText",
+  "model": "gemini-2.5-flash",
+  "prompt": "You are helping a user refine their mask refinement prompt for pose (body posture/mannequin).\n\nOriginal prompt: \"Can you make the face better\"\n\nThe user answered the following clarification questions:\n1. Q: What specific aspect of the face should be improved?\n   A: the face should be slightly tillted\n2. Q: What expression should the face convey?\n   A: Subtle smile\n3. Q: How should the head's orientation be adjusted?\n   A: I already answeredt his in the first quetion\n\nCreate an enhanced version of their original prompt that incorporates all answers naturally. The enhanced prompt should read as a single coherent instruction, not a list of answers.\n\nYou MUST respond with valid JSON only, no markdown:\n{\n  \"message\": \"Short friendly summary of what you added to their prompt (1-2 sentences)\",\n  \"enhancedPrompt\": \"The complete enhanced prompt ready for generation\"\n}\n\n\n\nAssistant:",
+  "inputImages": [],
+  "output": {
+    "type": "text",
+    "text": "```json\n{\n  \"message\": \"I've incorporated your feedback, refining the prompt to specify a slight tilt for the face and a subtle smile. This should help achieve the exact pose you're looking for!\",\n  \"enhancedPrompt\": \"Refine the face by slightly tilting it and adding a subtle smile.\"\n}\n```"
+  },
+  "durationMs": 1930
+}

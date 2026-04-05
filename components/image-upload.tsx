@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { Upload, X, Image as ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
 
 interface ImageUploadProps {
   onUpload: (file: File) => void;
@@ -60,11 +61,13 @@ export function ImageUpload({
   if (preview) {
     return (
       <div className={cn("relative overflow-hidden rounded-lg border border-border", className)}>
-        <img
-          src={preview}
-          alt="Upload preview"
-          className="h-full w-full object-cover"
-        />
+        <ImageLightbox src={preview} className="h-full w-full">
+          <img
+            src={preview}
+            alt="Upload preview"
+            className="h-full w-full object-contain"
+          />
+        </ImageLightbox>
         {onRemove && (
           <Button
             variant="secondary"

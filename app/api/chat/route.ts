@@ -120,21 +120,49 @@ export async function POST(request: Request) {
   const { messages, context, clarification, completenessCheck } = await request.json();
 
   const isCompletenessCheck = context === "completeness-check" && completenessCheck;
+  const isDeeperQuestions = context === "deeper-questions" && completenessCheck;
   const isClarification = context === "clarification" && clarification;
-  const systemPrompt = isCompletenessCheck
-    ? completenessCheckChatPrompt(
-        completenessCheck.stage,
-        completenessCheck.originalPrompt,
-        completenessCheck.questions,
-        completenessCheck.isMaskRefinement ?? false
-      )
-    : isClarification
-      ? buildClarificationPrompt(clarification)
-      : SYSTEM_PROMPT;
+  const systemPrompt = isDeeperQuestions
+    ? `You are helping a photographer refine their prompt for AI image generation.
+
+Current prompt: "${completenessCheck.originalPrompt}"
+
+The user wants to be more specific about: "${completenessCheck.topic}"
+
+Generate 3-5 targeted questions about this topic to make the prompt more detailed. Each question should have 3-5 clickable answer options.
+
+You MUST respond with valid JSON only, no markdown:
+{
+  "questions": [
+    {"question": "Your question here?", "options": ["Option A", "Option B", "Option C"]}
+  ]
+}`
+    : isCompletenessCheck
+      ? completenessCheckChatPrompt(
+          completenessCheck.stage,
+          completenessCheck.originalPrompt,
+          completenessCheck.questionsAndAnswers,
+          completenessCheck.isMaskRefinement ?? false
+        )
+      : isClarification
+        ? buildClarificationPrompt(clarification)
+        : SYSTEM_PROMPT;
 
   try {
     const prompt = formatConversation(systemPrompt, messages);
     const reply = await generateText(prompt);
+
+    if (isDeeperQuestions) {
+      try {
+        const cleaned = reply.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
+        const parsed = JSON.parse(cleaned) as {
+          questions: { question: string; options: string[] }[];
+        };
+        return NextResponse.json({ questions: parsed.questions ?? [] });
+      } catch {
+        return NextResponse.json({ questions: [] });
+      }
+    }
 
     if (isCompletenessCheck) {
       try {

@@ -51,6 +51,8 @@ export function MaskCanvas({ imageUrl, onExportMask, className }: MaskCanvasProp
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  const exportTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const exportMask = useCallback(async () => {
     if (!canvasRef.current) return;
     const dataUrl = await canvasRef.current.exportImage("png");
@@ -58,7 +60,8 @@ export function MaskCanvas({ imageUrl, onExportMask, className }: MaskCanvasProp
   }, [onExportMask]);
 
   const handleStrokeEnd = useCallback(() => {
-    exportMask();
+    if (exportTimerRef.current) clearTimeout(exportTimerRef.current);
+    exportTimerRef.current = setTimeout(() => exportMask(), 300);
   }, [exportMask]);
 
   return (

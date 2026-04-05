@@ -7,8 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:model": "node scripts/test-model-flow.mjs",
-    "test:screenshot": "node scripts/screenshot.mjs"
+    "test:model": "node --env-file=.env.local scripts/test-model-flow.mjs",
+    "test:screenshot": "node --env-file=.env.local scripts/screenshot.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",

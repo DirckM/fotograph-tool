@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,21 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [retrySeconds, setRetrySeconds] = useState(0);
+
+  useEffect(() => {
+    if (retrySeconds <= 0) return;
+    const timer = setInterval(() => {
+      setRetrySeconds((s) => {
+        if (s <= 1) {
+          setMessage("");
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [retrySeconds > 0]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -37,7 +52,14 @@ export default function LoginPage() {
     });
 
     if (error) {
-      setMessage(error.message);
+      const secondsMatch = error.message.match(/after (\d+) seconds/);
+      if (secondsMatch) {
+        const seconds = parseInt(secondsMatch[1], 10);
+        setRetrySeconds(seconds);
+        setMessage(`Rate limited. Try again in ${seconds} seconds.`);
+      } else {
+        setMessage(error.message);
+      }
     } else {
       setMessage("Check your email for the login link.");
     }
@@ -69,11 +91,15 @@ export default function LoginPage() {
                 required
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Sending link..." : "Send magic link"}
+            <Button type="submit" className="w-full" disabled={loading || retrySeconds > 0}>
+              {loading
+                ? "Sending link..."
+                : retrySeconds > 0
+                  ? `Try again in ${retrySeconds}s`
+                  : "Send magic link"}
             </Button>
             {message && (
-              <p className="text-center text-sm text-muted-foreground">
+              <p className={`text-center text-sm ${retrySeconds > 0 ? "text-destructive" : "text-muted-foreground"}`}>
                 {message}
               </p>
             )}

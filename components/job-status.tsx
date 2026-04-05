@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import type { Job } from "@/types";
 import { cn } from "@/lib/utils";
@@ -15,13 +15,27 @@ export function JobStatus({ jobId, onComplete, className }: JobStatusProps) {
   const [status, setStatus] = useState<Job["status"] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+
   useEffect(() => {
     if (!jobId) return;
 
     setStatus("processing");
     setError(null);
 
+    const MAX_POLLS = 150; // 5 minutes at 2s intervals
+    let pollCount = 0;
+
     const interval = setInterval(async () => {
+      pollCount++;
+      if (pollCount > MAX_POLLS) {
+        clearInterval(interval);
+        setError("Job timed out - please try again");
+        setStatus("failed");
+        return;
+      }
+
       try {
         const res = await fetch(`/api/jobs/${jobId}`);
         if (!res.ok) throw new Error("Failed to fetch job status");
@@ -31,7 +45,7 @@ export function JobStatus({ jobId, onComplete, className }: JobStatusProps) {
 
         if (job.status === "completed") {
           clearInterval(interval);
-          onComplete(job);
+          onCompleteRef.current(job);
         } else if (job.status === "failed") {
           clearInterval(interval);
           setError(job.error_message ?? "An unknown error occurred");
@@ -44,7 +58,7 @@ export function JobStatus({ jobId, onComplete, className }: JobStatusProps) {
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [jobId, onComplete]);
+  }, [jobId]);
 
   if (!jobId || !status) return null;
 

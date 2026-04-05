@@ -42,6 +42,10 @@ interface MoodboardBrowserProps {
   onToggleSelect: (id: string) => void;
   onRemove: (id: string) => void;
   onNoteChange?: (id: string, note: string) => void;
+  onImportSelected?: () => Promise<void> | void;
+  importSelectedLabel?: string;
+  triggerLabel?: string;
+  triggerClassName?: string;
   projectDescription?: string;
   uploading?: boolean;
   libraryCategory?: string;
@@ -57,6 +61,10 @@ export function MoodboardBrowser({
   onToggleSelect,
   onRemove,
   onNoteChange,
+  onImportSelected,
+  importSelectedLabel,
+  triggerLabel,
+  triggerClassName,
   projectDescription,
   uploading,
   libraryCategory,
@@ -66,6 +74,7 @@ export function MoodboardBrowser({
   const [libraryAssets, setLibraryAssets] = useState<LibraryAsset[]>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
+  const [importing, setImporting] = useState(false);
 
   const selectedCount = images.filter((img) => img.selected).length;
 
@@ -116,9 +125,9 @@ export function MoodboardBrowser({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
         render={
-          <Button variant="outline" size="default" data-tour="moodboard-trigger">
+          <Button variant="outline" size="default" data-tour="moodboard-trigger" className={triggerClassName}>
             <ImageIcon data-icon="inline-start" />
-            Browse Moodboard
+            {triggerLabel ?? "Browse References"}
             {images.length > 0 && (
               <span className="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
                 {images.length}
@@ -133,7 +142,7 @@ export function MoodboardBrowser({
       >
         <DialogHeader>
           <DialogTitle>
-            Moodboard
+            Reference Images
             {selectedCount > 0 && (
               <span className="ml-2 text-sm font-normal text-muted-foreground">
                 {selectedCount} selected
@@ -263,6 +272,33 @@ export function MoodboardBrowser({
             onRemove={onRemove}
           />
         </div>
+
+        {onImportSelected && selectedCount > 0 && (
+          <div className="border-t border-border pt-3 -mx-4 px-4">
+            <Button
+              className="w-full"
+              onClick={async () => {
+                setImporting(true);
+                try {
+                  await onImportSelected();
+                  setOpen(false);
+                } finally {
+                  setImporting(false);
+                }
+              }}
+              disabled={importing}
+            >
+              {importing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Importing...
+                </>
+              ) : (
+                importSelectedLabel ?? `Import ${selectedCount} Selected`
+              )}
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

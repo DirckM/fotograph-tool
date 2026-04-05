@@ -20,7 +20,7 @@ interface ClarificationContext {
 interface CompletenessCheckContext {
   stage: number;
   originalPrompt: string;
-  questions: string[];
+  questions: { question: string; options: string[] }[];
   isMaskRefinement: boolean;
 }
 

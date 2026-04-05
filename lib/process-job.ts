@@ -96,12 +96,13 @@ export async function processJob({
     }
 
     const resultBuffer = Buffer.from(result.data, "base64");
-    const resultPath = `${userId}/${job.id}.png`;
+    const ext = result.mimeType === "image/jpeg" ? "jpg" : "png";
+    const resultPath = `${userId}/${job.id}.${ext}`;
 
     const { error: uploadError } = await supabase.storage
       .from("results")
       .upload(resultPath, resultBuffer, {
-        contentType: "image/png",
+        contentType: result.mimeType || "image/png",
         upsert: false,
       });
 

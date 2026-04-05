@@ -35,10 +35,15 @@ interface ClarificationContext {
   availableImages?: MoodboardImage[];
 }
 
+interface CompletenessQuestion {
+  question: string;
+  options: string[];
+}
+
 interface CompletenessCheckContext {
   stage: number;
   originalPrompt: string;
-  questions: string[];
+  questions: CompletenessQuestion[];
   isMaskRefinement: boolean;
 }
 
@@ -243,6 +248,108 @@ function ClarificationCard({
   );
 }
 
+// -- Completeness check question card --
+
+function CompletenessQuestionCard({
+  question,
+  onAnswer,
+  disabled,
+}: {
+  question: CompletenessQuestion;
+  onAnswer: (answer: string) => void;
+  disabled: boolean;
+}) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const [showOther, setShowOther] = useState(false);
+  const [customText, setCustomText] = useState("");
+  const [answered, setAnswered] = useState(false);
+
+  const handleSelect = (option: string) => {
+    if (answered || disabled) return;
+    setSelected(option);
+    setShowOther(false);
+    setAnswered(true);
+    onAnswer(option);
+  };
+
+  const handleOtherSubmit = () => {
+    if (!customText.trim() || answered || disabled) return;
+    setAnswered(true);
+    onAnswer(customText.trim());
+  };
+
+  return (
+    <div className="space-y-2 rounded-lg border border-border/60 bg-card/60 p-3">
+      <p className="text-xs leading-relaxed text-foreground/90">
+        {question.question}
+      </p>
+
+      <div className="flex flex-wrap gap-1.5">
+        {question.options.map((option) => {
+          const isSelected = selected === option;
+          return (
+            <button
+              key={option}
+              type="button"
+              onClick={() => handleSelect(option)}
+              disabled={answered || disabled}
+              className={cn(
+                "flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all",
+                isSelected
+                  ? "border-blue-500/50 bg-blue-500/15 text-blue-400"
+                  : "border-border/60 bg-background/50 text-muted-foreground hover:border-foreground/20 hover:text-foreground",
+                (answered || disabled) && !isSelected && "opacity-40 cursor-default"
+              )}
+            >
+              {isSelected && <Check className="size-2.5" />}
+              {option}
+            </button>
+          );
+        })}
+        {!answered && !showOther && (
+          <button
+            type="button"
+            onClick={() => setShowOther(true)}
+            disabled={disabled}
+            className="rounded-full border border-dashed border-border/60 bg-background/30 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:border-foreground/20 hover:text-foreground"
+          >
+            Other...
+          </button>
+        )}
+      </div>
+
+      {showOther && !answered && (
+        <div className="flex items-center gap-1.5">
+          <input
+            type="text"
+            value={customText}
+            onChange={(e) => setCustomText(e.target.value)}
+            placeholder="Type your answer..."
+            disabled={disabled}
+            className="flex-1 rounded-md border border-border/60 bg-background/50 px-2 py-1 text-[11px] text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleOtherSubmit();
+            }}
+          />
+          <button
+            type="button"
+            onClick={handleOtherSubmit}
+            disabled={!customText.trim() || disabled}
+            className="flex h-6 items-center rounded-md bg-primary px-2 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
+          >
+            OK
+          </button>
+        </div>
+      )}
+
+      {answered && !selected && (
+        <p className="text-[11px] text-blue-400 italic">{customText}</p>
+      )}
+    </div>
+  );
+}
+
 // -- Main chat component --
 
 export function HelpChat({
@@ -269,6 +376,8 @@ export function HelpChat({
   const [open, setOpenState] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const [enhancedPrompt, setEnhancedPrompt] = useState<string | null>(null);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [answers, setAnswers] = useState<Record<number, string>>({});
   const prevInitialRef = useRef<string | undefined>(undefined);
   const prevClarificationRef = useRef<ClarificationContext | undefined>(undefined);
   const prevCompletenessRef = useRef<CompletenessCheckContext | undefined>(undefined);
@@ -309,14 +418,13 @@ export function HelpChat({
     if (completenessCheck && completenessCheck !== prevCompletenessRef.current) {
       prevCompletenessRef.current = completenessCheck;
       setEnhancedPrompt(null);
-      const questionsText = completenessCheck.questions
-        .map((q, i) => `${i + 1}. ${q}`)
-        .join("\n");
+      setCurrentQuestionIndex(0);
+      setAnswers({});
       setMessages([
         WELCOME_MESSAGE,
         {
           role: "assistant",
-          content: `Before generating, a few things could make the result better:\n\n${questionsText}\n\nAnswer these and I'll enhance your prompt.`,
+          content: "Before generating, a few details could improve the result. Answer these quick questions:",
         },
       ]);
       setOpen(true);
@@ -325,6 +433,11 @@ export function HelpChat({
 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [deeperPhase, setDeeperPhase] = useState<"ask" | "typing" | "questions" | null>(null);
+  const [deeperTopic, setDeeperTopic] = useState("");
+  const [deeperQuestions, setDeeperQuestions] = useState<CompletenessQuestion[]>([]);
+  const [deeperQuestionIndex, setDeeperQuestionIndex] = useState(0);
+  const [deeperAnswers, setDeeperAnswers] = useState<Record<number, string>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -332,7 +445,160 @@ export function HelpChat({
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, clarification, enhancedPrompt]);
+  }, [messages, clarification, enhancedPrompt, currentQuestionIndex]);
+
+  const handleQuestionAnswered = useCallback(
+    async (index: number, answer: string) => {
+      if (!completenessCheck) return;
+
+      const newAnswers = { ...answers, [index]: answer };
+      setAnswers(newAnswers);
+
+      const nextIndex = index + 1;
+      if (nextIndex < completenessCheck.questions.length) {
+        setCurrentQuestionIndex(nextIndex);
+        return;
+      }
+
+      // All questions answered — call chat API to get enhanced prompt
+      setLoading(true);
+      try {
+        const questionsAndAnswers = completenessCheck.questions.map((q, i) => ({
+          question: q.question,
+          answer: newAnswers[i] ?? "",
+        }));
+
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [],
+            context: "completeness-check",
+            completenessCheck: {
+              stage: completenessCheck.stage,
+              originalPrompt: completenessCheck.originalPrompt,
+              questionsAndAnswers,
+              isMaskRefinement: completenessCheck.isMaskRefinement,
+            },
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.message) {
+            setMessages((prev) => [
+              ...prev,
+              { role: "assistant", content: data.message },
+            ]);
+          }
+          if (data.enhancedPrompt) {
+            setEnhancedPrompt(data.enhancedPrompt);
+          }
+        }
+      } catch {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "Something went wrong generating the enhanced prompt. You can still generate with your original prompt." },
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [completenessCheck, answers]
+  );
+
+  const handleDeeperSubmit = useCallback(async () => {
+    if (!deeperTopic.trim() || !completenessCheck) return;
+    setLoading(true);
+    setDeeperPhase("questions");
+    setDeeperQuestionIndex(0);
+    setDeeperAnswers({});
+
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [],
+          context: "deeper-questions",
+          completenessCheck: {
+            stage: completenessCheck.stage,
+            originalPrompt: enhancedPrompt ?? completenessCheck.originalPrompt,
+            topic: deeperTopic.trim(),
+          },
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.questions?.length) {
+          setDeeperQuestions(data.questions);
+        } else {
+          setMessages((prev) => [...prev, { role: "assistant", content: "No additional questions needed for that topic. Ready to generate!" }]);
+          setDeeperPhase("ask");
+        }
+      }
+    } catch {
+      setMessages((prev) => [...prev, { role: "assistant", content: "Something went wrong. Try again." }]);
+      setDeeperPhase("ask");
+    } finally {
+      setLoading(false);
+    }
+  }, [deeperTopic, completenessCheck, enhancedPrompt]);
+
+  const handleDeeperQuestionAnswered = useCallback(
+    async (index: number, answer: string) => {
+      if (!completenessCheck) return;
+
+      const newAnswers = { ...deeperAnswers, [index]: answer };
+      setDeeperAnswers(newAnswers);
+
+      const nextIndex = index + 1;
+      if (nextIndex < deeperQuestions.length) {
+        setDeeperQuestionIndex(nextIndex);
+        return;
+      }
+
+      // All deeper questions answered — update enhanced prompt
+      setLoading(true);
+      try {
+        const questionsAndAnswers = deeperQuestions.map((q, i) => ({
+          question: q.question,
+          answer: newAnswers[i] ?? "",
+        }));
+
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [],
+            context: "completeness-check",
+            completenessCheck: {
+              stage: completenessCheck.stage,
+              originalPrompt: enhancedPrompt ?? completenessCheck.originalPrompt,
+              questionsAndAnswers,
+              isMaskRefinement: completenessCheck.isMaskRefinement,
+            },
+          }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.enhancedPrompt) {
+            setEnhancedPrompt(data.enhancedPrompt);
+          }
+        }
+      } catch {
+        // keep existing enhanced prompt
+      } finally {
+        setLoading(false);
+        setDeeperPhase("ask");
+        setDeeperQuestions([]);
+        setDeeperTopic("");
+      }
+    },
+    [completenessCheck, deeperAnswers, deeperQuestions, enhancedPrompt]
+  );
 
   useEffect(() => {
     if (open && inputRef.current) {
@@ -400,12 +666,9 @@ export function HelpChat({
       setLoading(true);
 
       try {
-        const isCompleteness = !!completenessCheck;
-        const chatContext = isCompleteness
-          ? "completeness-check"
-          : clarification
-            ? "clarification"
-            : (context ?? "model-generation");
+        const chatContext = clarification
+          ? "clarification"
+          : (context ?? "model-generation");
 
         const res = await fetch("/api/chat", {
           method: "POST",
@@ -414,7 +677,6 @@ export function HelpChat({
             messages: updated,
             context: chatContext,
             clarification: clarification ?? undefined,
-            completenessCheck: isCompleteness ? completenessCheck : undefined,
           }),
         });
 
@@ -426,9 +688,6 @@ export function HelpChat({
           ]);
           if (data.noteUpdates && onNoteSuggestions) {
             onNoteSuggestions(data.noteUpdates);
-          }
-          if (data.enhancedPrompt) {
-            setEnhancedPrompt(data.enhancedPrompt);
           }
         } else {
           setMessages((prev) => [
@@ -451,7 +710,7 @@ export function HelpChat({
         setLoading(false);
       }
     },
-    [messages, loading, context, clarification, completenessCheck, onNoteSuggestions]
+    [messages, loading, context, clarification, onNoteSuggestions]
   );
 
   const handleSubmit = useCallback(
@@ -537,6 +796,25 @@ export function HelpChat({
             </div>
           ))}
 
+          {/* Completeness check questions — one at a time */}
+          {completenessCheck && completenessCheck.questions.length > 0 && !enhancedPrompt && (
+            <div className="space-y-2">
+              {completenessCheck.questions.slice(0, currentQuestionIndex + 1).map((q, i) => (
+                <CompletenessQuestionCard
+                  key={i}
+                  question={q}
+                  onAnswer={(answer) => handleQuestionAnswered(i, answer)}
+                  disabled={loading || i < currentQuestionIndex}
+                />
+              ))}
+              {currentQuestionIndex < completenessCheck.questions.length && (
+                <p className="text-[10px] text-muted-foreground">
+                  Question {currentQuestionIndex + 1} of {completenessCheck.questions.length}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Enhanced prompt review card */}
           {enhancedPrompt && (
             <div className="space-y-2 rounded-lg border border-blue-500/30 bg-blue-500/5 p-3">
@@ -546,26 +824,80 @@ export function HelpChat({
               <p className="text-xs leading-relaxed text-foreground/90 whitespace-pre-wrap">
                 {enhancedPrompt}
               </p>
-              <div className="flex gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    onEnhancedPromptConfirm?.(enhancedPrompt);
-                    setEnhancedPrompt(null);
-                  }}
-                  className="flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-                >
-                  <Sparkles className="size-3" />
-                  Generate with this
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEnhancedPrompt(null)}
-                  className="rounded-md border border-border/60 bg-background/50 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  Dismiss
-                </button>
-              </div>
+
+              {/* Deeper questions flow */}
+              {deeperPhase === "questions" && deeperQuestions.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  {deeperQuestions.slice(0, deeperQuestionIndex + 1).map((q, i) => (
+                    <CompletenessQuestionCard
+                      key={`deeper-${i}`}
+                      question={q}
+                      onAnswer={(answer) => handleDeeperQuestionAnswered(i, answer)}
+                      disabled={loading || i < deeperQuestionIndex}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {deeperPhase === "typing" && (
+                <div className="space-y-1.5 pt-1">
+                  <p className="text-[11px] text-muted-foreground">What do you want to be more specific about?</p>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={deeperTopic}
+                      onChange={(e) => setDeeperTopic(e.target.value)}
+                      placeholder="e.g. hair texture, lighting mood, eye details..."
+                      className="flex-1 rounded-md border border-border/60 bg-background/50 px-2 py-1 text-[11px] text-foreground outline-none placeholder:text-muted-foreground/50 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && deeperTopic.trim()) handleDeeperSubmit();
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleDeeperSubmit}
+                      disabled={!deeperTopic.trim() || loading}
+                      className="flex h-6 items-center rounded-md bg-primary px-2 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
+                    >
+                      Go
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Action buttons */}
+              {(!deeperPhase || deeperPhase === "ask") && (
+                <div className="space-y-2 pt-1">
+                  {deeperPhase === "ask" && (
+                    <p className="text-[11px] text-muted-foreground">Anything else you want to be more specific about?</p>
+                  )}
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onEnhancedPromptConfirm?.(enhancedPrompt);
+                        setEnhancedPrompt(null);
+                        setDeeperPhase(null);
+                      }}
+                      className="flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                    >
+                      <Sparkles className="size-3" />
+                      {deeperPhase === "ask" ? "No, generate" : "Generate with this"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeeperPhase("typing");
+                        setDeeperTopic("");
+                      }}
+                      className="rounded-md border border-border/60 bg-background/50 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      {deeperPhase === "ask" ? "Yes, go deeper" : "Be more specific"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

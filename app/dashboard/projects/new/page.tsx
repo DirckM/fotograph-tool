@@ -9,13 +9,61 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+const PROJECT_EXAMPLES = [
+  {
+    label: "Fashion editorial",
+    text: "High-end editorial shoot for spring/summer collection. Moody studio lighting, minimalist styling, focus on fabric texture and silhouette.",
+  },
+  {
+    label: "E-commerce lookbook",
+    text: "Product lookbook for online store. Clean white background, consistent lighting, full outfit shots front and back, detail close-ups.",
+  },
+  {
+    label: "Campaign shoot",
+    text: "Brand campaign for social media and print ads. Outdoor urban setting, natural light, lifestyle feel, multiple outfit changes.",
+  },
+  {
+    label: "Beauty editorial",
+    text: "Close-up beauty editorial focusing on skin and makeup. Soft diffused lighting, clean backgrounds, emphasis on natural skin texture.",
+  },
+  {
+    label: "Streetwear lookbook",
+    text: "Street-style lookbook shoot. Gritty urban locations, golden hour lighting, casual poses, mix of wide and tight shots.",
+  },
+  {
+    label: "Catalog production",
+    text: "High-volume catalog shoot for seasonal collection. Neutral backgrounds, even lighting, standard poses per garment category.",
+  },
+];
+
+const CLIENT_EXAMPLES = [
+  {
+    name: "Vogue Netherlands",
+    notes: "Editorial spread for September issue. Brand guidelines require muted earth tones, no heavy retouching. Deadline: March 15.",
+  },
+  {
+    name: "ASOS",
+    notes: "E-commerce product shots, white background, consistent lighting across all garments. Need front + back for every item. 200+ SKUs.",
+  },
+  {
+    name: "Nike EMEA",
+    notes: "Campaign for new running line. Outdoor action shots, diverse casting, energetic vibe. Must align with global brand book.",
+  },
+  {
+    name: "Independent designer",
+    notes: "Small capsule collection, 8 pieces. Creative freedom on styling. Budget is limited so we need to be efficient with setups.",
+  },
+];
+
 export default function NewProjectPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [showExamples, setShowExamples] = useState(false);
   const [employerName, setEmployerName] = useState("");
   const [employerNotes, setEmployerNotes] = useState("");
+  const [showClientExamples, setShowClientExamples] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -80,7 +128,18 @@ export default function NewProjectPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="description">Description</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-muted-foreground"
+                  onClick={() => setShowExamples((v) => !v)}
+                >
+                  {showExamples ? "Hide examples" : "Examples"}
+                </Button>
+              </div>
               <Textarea
                 id="description"
                 value={description}
@@ -88,15 +147,65 @@ export default function NewProjectPage() {
                 placeholder="Brief description of the photoshoot..."
                 rows={3}
               />
+              {showExamples && (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {PROJECT_EXAMPLES.map((ex) => (
+                    <button
+                      key={ex.label}
+                      type="button"
+                      className="rounded-lg border border-border px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/60 hover:text-foreground"
+                      onClick={() => {
+                        setDescription(ex.text);
+                        setShowExamples(false);
+                      }}
+                    >
+                      <span className="font-medium text-foreground">{ex.label}</span>
+                      <br />
+                      {ex.text}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Client Information</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base">Client Information</CardTitle>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground"
+                onClick={() => setShowClientExamples((v) => !v)}
+              >
+                {showClientExamples ? "Hide examples" : "Examples"}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            {showClientExamples && (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {CLIENT_EXAMPLES.map((ex) => (
+                  <button
+                    key={ex.name}
+                    type="button"
+                    className="rounded-lg border border-border px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/60 hover:text-foreground"
+                    onClick={() => {
+                      setEmployerName(ex.name);
+                      setEmployerNotes(ex.notes);
+                      setShowClientExamples(false);
+                    }}
+                  >
+                    <span className="font-medium text-foreground">{ex.name}</span>
+                    <br />
+                    {ex.notes}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="employer">Client / Employer Name</Label>
               <Input
@@ -112,7 +221,7 @@ export default function NewProjectPage() {
                 id="notes"
                 value={employerNotes}
                 onChange={(e) => setEmployerNotes(e.target.value)}
-                placeholder="Any specific requirements or notes from the client..."
+                placeholder="Requirements, deadlines, brand guidelines..."
                 rows={3}
               />
             </div>

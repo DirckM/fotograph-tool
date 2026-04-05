@@ -18,10 +18,39 @@ import {
 import { JobStatus } from "@/components/job-status";
 import { MoodboardBrowser } from "@/components/projects/moodboard-browser";
 import { StageGate } from "@/components/projects/stage-gate";
+import { StageGuide } from "@/components/projects/stage-guide";
 import { useHelpChat } from "@/components/projects/help-chat-context";
 import { cn } from "@/lib/utils";
+import { DisabledTooltip } from "@/components/ui/disabled-tooltip";
 import { useFileUpload } from "@/lib/hooks";
 import type { Project, ProjectAsset, Job } from "@/types";
+
+const MODEL_EXAMPLES = [
+  {
+    label: "Editorial female",
+    text: "Young woman, mid-20s, high cheekbones, warm skin tone, dark brown wavy hair, soft freckles, green eyes",
+  },
+  {
+    label: "Editorial male",
+    text: "Man, early 30s, sharp jawline, light stubble, short dark hair, brown eyes, olive skin tone",
+  },
+  {
+    label: "Commercial female",
+    text: "Woman, late 20s, friendly open face, blonde straight hair, blue eyes, fair skin, natural look",
+  },
+  {
+    label: "Commercial male",
+    text: "Man, mid-20s, clean-shaven, curly auburn hair, hazel eyes, freckled, approachable expression",
+  },
+  {
+    label: "High fashion",
+    text: "Androgynous model, early 20s, striking angular features, very short platinum buzz cut, pale grey eyes, porcelain skin",
+  },
+  {
+    label: "Mature model",
+    text: "Woman, mid-50s, silver grey hair in a bob, warm brown eyes, laugh lines, elegant bone structure, medium skin tone",
+  },
+];
 
 export default function ModelPage() {
   const params = useParams<{ projectId: string }>();
@@ -33,6 +62,7 @@ export default function ModelPage() {
   const [loading, setLoading] = useState(true);
 
   const [description, setDescription] = useState("");
+  const [showExamples, setShowExamples] = useState(false);
   const [moodboardAssets, setMoodboardAssets] = useState<ProjectAsset[]>([]);
   const [selectedMoodboardIds, setSelectedMoodboardIds] = useState<Set<string>>(
     new Set()
@@ -70,7 +100,6 @@ export default function ModelPage() {
         if (projectRes.ok) {
           const proj: Project = await projectRes.json();
           setProject(proj);
-          setDescription(proj.description ?? "");
         }
 
         if (assetsRes.ok) {
@@ -86,11 +115,11 @@ export default function ModelPage() {
           }
           setNotes(loadedNotes);
           setSelectedMoodboardIds(loadedSelected);
-          const face = allAssets.find((a) => a.asset_type === "refined_face");
+          const face = allAssets.findLast((a) => a.asset_type === "refined_face");
           if (face) {
             setRefinedFace(face);
           } else {
-            const gen = allAssets.find((a) => a.asset_type === "generated_face");
+            const gen = allAssets.findLast((a) => a.asset_type === "generated_face");
             if (gen) setGeneratedFace(gen);
           }
         }
@@ -479,27 +508,69 @@ export default function ModelPage() {
       <div className="h-full overflow-y-auto">
         <div className="mx-auto max-w-3xl space-y-6 px-6 py-4">
             {/* Title */}
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight">
-                Stage 1: <span className="font-serif italic">Model</span>{" "}
-                Generation
-              </h2>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                Describe your model, add reference images, and generate a face.
-              </p>
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-lg font-semibold tracking-tight">
+                  Stage 1: <span className="font-serif italic">Model</span>{" "}
+                  Generation
+                </h2>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  Describe your model, add reference images, and generate a face.
+                </p>
+              </div>
+              <StageGuide
+                items={[
+                  "Write a description of how the model should look - age, ethnicity, facial features, hair color/style, eye color, skin tone.",
+                  "Click 'Browse References' to add face reference images. The AI will blend traits from all references you add - it does not pick one face, it mixes features from all of them.",
+                  "Use the note field under each reference image to tell the AI exactly what to take from that specific reference. For example: 'use the jawline and cheekbones' or 'match this skin tone'. Without notes, the AI decides what to blend.",
+                  "Click 'Generate Face' to create the model. The assistant on the right may ask follow-up questions if the description is missing key details.",
+                  "After generating, click 'Continue to Refinement & Angles' to paint corrections on the face and generate the model from different camera angles.",
+                ]}
+                tip="Reference images are not 'face swaps' - they are inspiration. The AI creates a new face by mixing traits from your references based on your notes. The more specific your notes, the more control you have over the result."
+              />
             </div>
 
             {/* Description */}
             <div className="space-y-2">
-              <Label htmlFor="model-description">Model Description</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="model-description">Model Description</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-muted-foreground"
+                  onClick={() => setShowExamples((v) => !v)}
+                >
+                  {showExamples ? "Hide examples" : "Examples"}
+                </Button>
+              </div>
               <Textarea
                 id="model-description"
-                placeholder="Describe the model you want to generate (e.g., 'Young woman, mid-20s, high cheekbones, warm skin tone, dark brown wavy hair')..."
+                placeholder="Describe the model you want to generate..."
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={3}
                 className="resize-y"
               />
+              {showExamples && (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {MODEL_EXAMPLES.map((ex) => (
+                    <button
+                      key={ex.label}
+                      type="button"
+                      className="rounded-lg border border-border px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/60 hover:text-foreground"
+                      onClick={() => {
+                        setDescription(ex.text);
+                        setShowExamples(false);
+                      }}
+                    >
+                      <span className="font-medium text-foreground">{ex.label}</span>
+                      <br />
+                      {ex.text}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Reference images */}
@@ -595,6 +666,16 @@ export default function ModelPage() {
             )}
 
             {/* Generate button */}
+            <DisabledTooltip
+              message={
+                !generating && !refining
+                  ? [
+                      !description.trim() && "Enter a model description",
+                      uploading && "Wait for upload to finish",
+                    ].filter(Boolean).join(" and ") || undefined
+                  : undefined
+              }
+            >
             <Button
               data-tour="model-generate"
               onClick={() => {
@@ -629,6 +710,7 @@ export default function ModelPage() {
                 </>
               )}
             </Button>
+            </DisabledTooltip>
 
             {/* Regenerate confirm */}
             <Dialog

@@ -23,10 +23,13 @@ const SOURCE_LABELS: Record<ProjectAsset["source"], string> = {
   gemini: "AI",
 };
 
+const SUPABASE_STORAGE_BASE = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/project-assets/`;
+
 function getImageUrl(asset: ProjectAsset): string | null {
   if (asset.external_url) return asset.external_url;
-  if (asset.storage_path) return asset.storage_path;
-  return null;
+  if (!asset.storage_path) return null;
+  if (asset.storage_path.startsWith("http")) return asset.storage_path;
+  return `${SUPABASE_STORAGE_BASE}${asset.storage_path}`;
 }
 
 export function AssetGrid({

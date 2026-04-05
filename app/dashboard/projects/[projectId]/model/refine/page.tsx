@@ -27,8 +27,25 @@ import { StageGate } from "@/components/projects/stage-gate";
 import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { useHelpChat } from "@/components/projects/help-chat-context";
 import { cn } from "@/lib/utils";
+import { DisabledTooltip } from "@/components/ui/disabled-tooltip";
 import { useFileUpload } from "@/lib/hooks";
 import type { Project, ProjectAsset, Job } from "@/types";
+
+function AngleJobStatus({
+  jobId,
+  angle,
+  onAngleComplete,
+}: {
+  jobId: string;
+  angle: string;
+  onAngleComplete: (angle: string, job: Job) => void;
+}) {
+  const handleComplete = useCallback(
+    (job: Job) => onAngleComplete(angle, job),
+    [angle, onAngleComplete]
+  );
+  return <JobStatus jobId={jobId} onComplete={handleComplete} />;
+}
 
 const ANGLE_SET = [
   { angle: "front", label: "Front" },
@@ -192,11 +209,11 @@ export default function RefinePage() {
           const allAssets: ProjectAsset[] = await assetsRes.json();
           setMoodboardAssets(allAssets.filter((a) => a.asset_type === "face_moodboard"));
 
-          const face = allAssets.find((a) => a.asset_type === "refined_face");
+          const face = allAssets.findLast((a) => a.asset_type === "refined_face");
           if (face) {
             setRefinedFace(face);
           } else {
-            const gen = allAssets.find((a) => a.asset_type === "generated_face");
+            const gen = allAssets.findLast((a) => a.asset_type === "generated_face");
             if (gen) setGeneratedFace(gen);
           }
 
@@ -331,7 +348,7 @@ export default function RefinePage() {
 
   // -- Refinement handlers --
 
-  const executeRefine = useCallback(async (finalNotes?: string) => {
+  const executeRefine = useCallback(async (finalNotes?: string, overridePrompt?: string, skip?: boolean) => {
     if (!currentFaceUrl || !maskDataUrl) return;
 
     setRefining(true);
@@ -339,9 +356,10 @@ export default function RefinePage() {
       .filter((img) => selectedRefineRefs.has(img.id))
       .map((img) => img.url);
 
+    const basePrompt = overridePrompt || refinePrompt.trim();
     const fullPrompt = finalNotes
-      ? `${refinePrompt.trim()}\n\nReference image notes:\n${finalNotes}`
-      : refinePrompt.trim();
+      ? `${basePrompt}\n\nReference image notes:\n${finalNotes}`
+      : basePrompt;
 
     try {
       const res = await fetch(
@@ -353,19 +371,37 @@ export default function RefinePage() {
             prompt: fullPrompt,
             maskPath: maskDataUrl,
             imagePaths: [currentFaceUrl, ...selectedUrls],
+            skipCompletenessCheck: skip ?? false,
+            enhancedPrompt: overridePrompt || undefined,
           }),
         }
       );
       if (res.ok) {
-        const job: Job = await res.json();
-        setRefineJobId(job.id);
+        const data = await res.json();
+        if (data.needsClarification && data.clarificationType === "completeness-check") {
+          setRefining(false);
+          setChatState({
+            completenessCheck: {
+              stage: data.stage,
+              originalPrompt: data.originalPrompt,
+              questions: data.questions,
+              isMaskRefinement: true,
+            },
+            onEnhancedPromptConfirm: (enhancedPrompt: string) => {
+              clearChatState();
+              executeRefine(finalNotes, enhancedPrompt, true);
+            },
+          });
+          return;
+        }
+        setRefineJobId(data.id);
       } else {
         setRefining(false);
       }
     } catch {
       setRefining(false);
     }
-  }, [params.projectId, currentFaceUrl, maskDataUrl, refinePrompt, selectedRefineRefs, moodboardReferenceImages]);
+  }, [params.projectId, currentFaceUrl, maskDataUrl, refinePrompt, selectedRefineRefs, moodboardReferenceImages, setChatState, clearChatState]);
 
   const handleNoteSuggestions = useCallback(
     (updates: { index: number; refined: string }[]) => {
@@ -586,16 +622,21 @@ export default function RefinePage() {
   const handleGenerateAllAngles = useCallback(async () => {
     setGeneratingAllAngles(true);
     for (const { angle } of ANGLE_SET) {
-      const entry = angleJobs.get(angle);
-      if (entry?.status !== "done") {
+      const skip = await new Promise<boolean>((resolve) => {
+        setAngleJobs((prev) => {
+          resolve(prev.get(angle)?.status === "done");
+          return prev;
+        });
+      });
+      if (!skip) {
         await handleGenerateSingleAngle(angle);
       }
     }
     setGeneratingAllAngles(false);
-  }, [angleJobs, handleGenerateSingleAngle]);
+  }, [handleGenerateSingleAngle]);
 
   const handleAngleJobComplete = useCallback(
-    (angle: string) => async (job: Job) => {
+    async (angle: string, job: Job) => {
       setAngleJobs((prev) => {
         const next = new Map(prev);
         next.set(angle, { jobId: null, status: "done" });
@@ -631,14 +672,8 @@ export default function RefinePage() {
   });
   const selectedAngleUrl = selectedAngleAsset?.storage_path ?? selectedAngleAsset?.external_url;
 
-  const handleAngleRefine = useCallback(async () => {
-    if (!angleRefineMask || !angleRefinePrompt.trim() || !selectedAngleUrl) {
-      const missing: string[] = [];
-      if (!angleRefineMask) missing.push("paint a mask");
-      if (!angleRefinePrompt.trim()) missing.push("enter a description");
-      toast.warning(`To refine angle: ${missing.join(" and ")}`);
-      return;
-    }
+  const executeAngleRefine = useCallback(async (overridePrompt?: string, skip?: boolean) => {
+    if (!angleRefineMask || !selectedAngleUrl) return;
 
     setAngleRefining(true);
     const selectedImages = moodboardReferenceImages.filter((img) => selectedAngleRefineRefs.has(img.id));
@@ -648,9 +683,10 @@ export default function RefinePage() {
       .filter((img) => angleRefineRefNotes[img.id])
       .map((img) => `- Reference note: ${angleRefineRefNotes[img.id]}`)
       .join("\n");
+    const basePrompt = overridePrompt || angleRefinePrompt.trim();
     const fullPrompt = refNotes
-      ? `${angleRefinePrompt.trim()}\n\nReference image notes:\n${refNotes}`
-      : angleRefinePrompt.trim();
+      ? `${basePrompt}\n\nReference image notes:\n${refNotes}`
+      : basePrompt;
 
     try {
       const res = await fetch(
@@ -662,19 +698,48 @@ export default function RefinePage() {
             prompt: fullPrompt,
             maskPath: angleRefineMask,
             imagePaths: [selectedAngleUrl, ...selectedUrls],
+            skipCompletenessCheck: skip ?? false,
+            enhancedPrompt: overridePrompt || undefined,
           }),
         }
       );
       if (res.ok) {
-        const job: Job = await res.json();
-        setAngleRefineJobId(job.id);
+        const data = await res.json();
+        if (data.needsClarification && data.clarificationType === "completeness-check") {
+          setAngleRefining(false);
+          setChatState({
+            completenessCheck: {
+              stage: data.stage,
+              originalPrompt: data.originalPrompt,
+              questions: data.questions,
+              isMaskRefinement: true,
+            },
+            onEnhancedPromptConfirm: (enhancedPrompt: string) => {
+              clearChatState();
+              executeAngleRefine(enhancedPrompt, true);
+            },
+          });
+          return;
+        }
+        setAngleRefineJobId(data.id);
       } else {
         setAngleRefining(false);
       }
     } catch {
       setAngleRefining(false);
     }
-  }, [params.projectId, selectedAngleUrl, angleRefineMask, angleRefinePrompt, selectedAngleRefineRefs, moodboardReferenceImages, angleRefineRefNotes]);
+  }, [params.projectId, selectedAngleUrl, angleRefineMask, angleRefinePrompt, selectedAngleRefineRefs, moodboardReferenceImages, angleRefineRefNotes, setChatState, clearChatState]);
+
+  const handleAngleRefine = useCallback(async () => {
+    if (!angleRefineMask || !angleRefinePrompt.trim() || !selectedAngleUrl) {
+      const missing: string[] = [];
+      if (!angleRefineMask) missing.push("paint a mask");
+      if (!angleRefinePrompt.trim()) missing.push("enter a description");
+      toast.warning(`To refine angle: ${missing.join(" and ")}`);
+      return;
+    }
+    executeAngleRefine();
+  }, [angleRefineMask, angleRefinePrompt, selectedAngleUrl, executeAngleRefine]);
 
   const handleAngleRefineComplete = useCallback(
     async (job: Job) => {
@@ -839,9 +904,19 @@ export default function RefinePage() {
                   libraryCategory="model"
                 />
 
+                <DisabledTooltip
+                  message={
+                    !refining && !refiningNotesLoading && !showNoteReview
+                      ? [
+                          !maskDataUrl && "Paint a mask on the image",
+                          !refinePrompt.trim() && "Enter a refinement description",
+                        ].filter(Boolean).join(" and ") || undefined
+                      : undefined
+                  }
+                >
                 <Button
                   onClick={handleRefine}
-                  disabled={refining || refiningNotesLoading || showNoteReview}
+                  disabled={refining || refiningNotesLoading || showNoteReview || !maskDataUrl || !refinePrompt.trim()}
                   className="w-full"
                 >
                   {refiningNotesLoading ? (
@@ -861,6 +936,7 @@ export default function RefinePage() {
                     </>
                   )}
                 </Button>
+                </DisabledTooltip>
 
                 {/* Note review panel */}
                 {showNoteReview && refinedRefNotes.length > 0 && (
@@ -1015,10 +1091,11 @@ export default function RefinePage() {
               {/* Job statuses */}
               {Array.from(angleJobs.entries()).map(([angle, entry]) =>
                 entry.jobId ? (
-                  <JobStatus
+                  <AngleJobStatus
                     key={angle}
                     jobId={entry.jobId}
-                    onComplete={handleAngleJobComplete(angle)}
+                    angle={angle}
+                    onAngleComplete={handleAngleJobComplete}
                   />
                 ) : null
               )}
@@ -1175,23 +1252,34 @@ export default function RefinePage() {
                       libraryCategory="model"
                     />
 
-                    <Button
-                      onClick={handleAngleRefine}
-                      disabled={angleRefining}
-                      className="w-full"
+                    <DisabledTooltip
+                      message={
+                        !angleRefining
+                          ? [
+                              !angleRefineMask && "Paint a mask on the image",
+                              !angleRefinePrompt.trim() && "Enter a refinement description",
+                            ].filter(Boolean).join(" and ") || undefined
+                          : undefined
+                      }
                     >
-                      {angleRefining ? (
-                        <>
-                          <Loader2 className="animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        <>
-                          <Wand2 />
-                          Refine Angle
-                        </>
-                      )}
-                    </Button>
+                      <Button
+                        onClick={handleAngleRefine}
+                        disabled={angleRefining || !angleRefineMask || !angleRefinePrompt.trim()}
+                        className="w-full"
+                      >
+                        {angleRefining ? (
+                          <>
+                            <Loader2 className="animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <Wand2 />
+                            Refine Angle
+                          </>
+                        )}
+                      </Button>
+                    </DisabledTooltip>
 
                     {angleRefineJobId && (
                       <JobStatus

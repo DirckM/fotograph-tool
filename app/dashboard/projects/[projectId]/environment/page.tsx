@@ -13,6 +13,7 @@ import { RefinementControls } from "@/components/projects/refinement-panel";
 import { MaskCanvas } from "@/components/projects/mask-canvas";
 import { StageGate } from "@/components/projects/stage-gate";
 import { cn } from "@/lib/utils";
+import { DisabledTooltip } from "@/components/ui/disabled-tooltip";
 import { useFileUpload } from "@/lib/hooks";
 import { useHelpChat } from "@/components/projects/help-chat-context";
 import type { Project, ProjectAsset, Job } from "@/types";
@@ -74,6 +75,33 @@ function resolveAssetUrl(asset: ProjectAsset): string {
   return url;
 }
 
+const ENV_EXAMPLES = [
+  {
+    label: "Parisian apartment",
+    text: "Luxury parisian apartment, large windows, golden hour sunlight, warm wooden floor, minimalist furniture, neutral tones",
+  },
+  {
+    label: "Studio - clean",
+    text: "Professional photography studio, seamless white background, softbox lighting, clean and minimal",
+  },
+  {
+    label: "Urban rooftop",
+    text: "Concrete rooftop at sunset, city skyline in background, warm golden light, industrial pipes and vents, gritty texture",
+  },
+  {
+    label: "Nature - forest",
+    text: "Dense forest clearing, dappled sunlight through canopy, moss-covered ground, soft green tones, early morning mist",
+  },
+  {
+    label: "Brutalist architecture",
+    text: "Raw concrete brutalist building interior, geometric shapes, harsh directional light, deep shadows, monochrome feel",
+  },
+  {
+    label: "Beach golden hour",
+    text: "Sandy beach at golden hour, warm low sun, gentle waves, soft pastel sky, relaxed coastal atmosphere",
+  },
+];
+
 export default function EnvironmentStagePage() {
   const params = useParams<{ projectId: string }>();
   const router = useRouter();
@@ -83,6 +111,7 @@ export default function EnvironmentStagePage() {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [prompt, setPrompt] = useState("");
+  const [showExamples, setShowExamples] = useState(false);
   const [moodboard, setMoodboard] = useState<MoodboardImage[]>([]);
   const [generating, setGenerating] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
@@ -430,6 +459,14 @@ export default function EnvironmentStagePage() {
           </>
         }
         description="Describe and generate the photographic environment for your scene."
+        guide={[
+          "Describe the setting in detail - location type, materials, colors, mood. The more specific, the better the result.",
+          "Use the options row (lighting, time of day, style) to quickly add modifiers without typing them out.",
+          "Click 'Browse References' to add location/atmosphere reference images. The AI will match the overall feel, not copy the exact space.",
+          "Click 'Generate' - the assistant may ask follow-up questions if details are missing (e.g. indoor vs outdoor, color palette).",
+          "After generating, use the mask tool to paint over areas you want to change. Describe what should replace the painted area and click 'Refine'.",
+        ]}
+        guideTip="Reference images guide the mood and atmosphere, not the exact layout. Add notes per reference to specify what to take from it (e.g. 'match the warm lighting' or 'use this floor texture')."
         contentKey={resultImage ? "result" : "setup"}
         aside={
           resultImage ? (
@@ -473,16 +510,46 @@ export default function EnvironmentStagePage() {
           ) : (
             <div className="flex flex-col gap-4">
               <div className="space-y-2">
-                <Label htmlFor="env-prompt">
-                  Describe the environment you want to create
-                </Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="env-prompt">
+                    Describe the environment you want to create
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-muted-foreground"
+                    onClick={() => setShowExamples((v) => !v)}
+                  >
+                    {showExamples ? "Hide examples" : "Examples"}
+                  </Button>
+                </div>
                 <Textarea
                   id="env-prompt"
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="luxury parisian apartment, large windows, golden hour sunlight, warm wooden floor, minimalist furniture..."
+                  placeholder="Describe the setting, lighting, mood..."
                   rows={4}
                 />
+                {showExamples && (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {ENV_EXAMPLES.map((ex) => (
+                      <button
+                        key={ex.label}
+                        type="button"
+                        className="rounded-lg border border-border px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/60 hover:text-foreground"
+                        onClick={() => {
+                          setPrompt(ex.text);
+                          setShowExamples(false);
+                        }}
+                      >
+                        <span className="font-medium text-foreground">{ex.label}</span>
+                        <br />
+                        {ex.text}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Environment options — collapsible */}
@@ -631,25 +698,33 @@ export default function EnvironmentStagePage() {
                 />
               )}
 
-              <Button
-                size="lg"
-                onClick={handleGenerate}
-                disabled={generating || !prompt.trim() || !!jobId}
-                className="w-full"
-                data-tour="env-generate"
+              <DisabledTooltip
+                message={
+                  !generating && !jobId && !prompt.trim()
+                    ? "Describe the environment"
+                    : undefined
+                }
               >
-                {generating || jobId ? (
-                  <>
-                    <Loader2 className="animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles />
-                    Generate Environment
-                  </>
-                )}
-              </Button>
+                <Button
+                  size="lg"
+                  onClick={handleGenerate}
+                  disabled={generating || !prompt.trim() || !!jobId}
+                  className="w-full"
+                  data-tour="env-generate"
+                >
+                  {generating || jobId ? (
+                    <>
+                      <Loader2 className="animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles />
+                      Generate Environment
+                    </>
+                  )}
+                </Button>
+              </DisabledTooltip>
 
               <JobStatus jobId={jobId} onComplete={handleJobComplete} />
             </div>

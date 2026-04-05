@@ -1,10 +1,13 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { StageGuide } from "@/components/projects/stage-guide";
 
 interface StageLayoutProps {
   title: React.ReactNode;
   description?: string;
+  guide?: string[];
+  guideTip?: string;
   children: React.ReactNode;
   aside: React.ReactNode;
   footer?: React.ReactNode;
@@ -14,6 +17,8 @@ interface StageLayoutProps {
 export function StageLayout({
   title,
   description,
+  guide,
+  guideTip,
   children,
   aside,
   footer,
@@ -21,11 +26,14 @@ export function StageLayout({
 }: StageLayoutProps) {
   return (
     <div className="flex h-full flex-col overflow-hidden animate-in fade-in-0 duration-300">
-      <div className="shrink-0 px-6 pt-4 pb-3">
-        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-        {description && (
-          <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
-        )}
+      <div className="shrink-0 px-6 pt-4 pb-3 flex items-start justify-between">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+          {description && (
+            <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
+          )}
+        </div>
+        {guide && <StageGuide items={guide} tip={guideTip} />}
       </div>
 
       <div className="min-h-0 flex-1 px-6 pb-4">

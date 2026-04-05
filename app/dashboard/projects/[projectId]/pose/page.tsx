@@ -14,6 +14,7 @@ import { StageGate } from "@/components/projects/stage-gate";
 import { StageLayout } from "@/components/projects/stage-layout";
 import { useHelpChat } from "@/components/projects/help-chat-context";
 import { cn } from "@/lib/utils";
+import { DisabledTooltip } from "@/components/ui/disabled-tooltip";
 import { useFileUpload } from "@/lib/hooks";
 import type { Project, ProjectAsset, Job } from "@/types";
 
@@ -24,6 +25,33 @@ interface MoodboardImage {
   note?: string;
 }
 
+const POSE_EXAMPLES = [
+  {
+    label: "Casual standing",
+    text: "Standing casually, one hand in pocket, weight shifted to one leg, relaxed shoulders, looking slightly off-camera",
+  },
+  {
+    label: "Seated editorial",
+    text: "Seated on a low stool, legs crossed, one hand resting on knee, upright posture, direct eye contact with camera",
+  },
+  {
+    label: "Walking motion",
+    text: "Mid-stride walking pose, arms in natural swing, slight forward lean, dynamic movement, candid feel",
+  },
+  {
+    label: "Leaning pose",
+    text: "Leaning against a wall with one shoulder, arms folded, ankles crossed, confident and relaxed body language",
+  },
+  {
+    label: "High fashion",
+    text: "Strong angular pose, one hip pushed out, hand on waist, elongated neck, sharp deliberate posture",
+  },
+  {
+    label: "Crouching / low",
+    text: "Low crouching position, one knee up, forearms resting on knees, looking up at camera, street-style energy",
+  },
+];
+
 export default function PoseStagePage() {
   const params = useParams<{ projectId: string }>();
   const router = useRouter();
@@ -33,6 +61,7 @@ export default function PoseStagePage() {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [prompt, setPrompt] = useState("");
+  const [showExamples, setShowExamples] = useState(false);
   const [moodboard, setMoodboard] = useState<MoodboardImage[]>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [generating, setGenerating] = useState(false);
@@ -405,6 +434,7 @@ export default function PoseStagePage() {
         if (res.ok) {
           const result = await res.json();
           if (result.needsClarification && result.clarificationType === "completeness-check") {
+            setRefining(false);
             setChatState({
               completenessCheck: {
                 stage: result.stage,
@@ -540,6 +570,13 @@ export default function PoseStagePage() {
           </>
         }
         description="Define the body posture for your model. Add reference images and describe the pose."
+        guide={[
+          "Describe the body position in detail - how the model is standing/sitting, arm and leg positions, weight distribution, overall energy.",
+          "Click 'Browse References' to add pose reference photos. The AI uses these to understand the body language and proportions you want.",
+          "Add notes per reference to call out specifics (e.g. 'match the arm position' or 'use this leg stance but more relaxed').",
+          "Click 'Generate' to create the pose. After generating, use the mask tool to paint and refine specific body parts.",
+        ]}
+        guideTip="Reference images are used for body positioning only - they don't affect the face or clothing. The more angles you provide as references, the better the AI understands the 3D pose."
         contentKey={hasResult ? "result" : "setup"}
         aside={
           hasResult ? (
@@ -603,14 +640,44 @@ export default function PoseStagePage() {
           ) : (
             <div className="flex flex-col gap-4">
               <div className="space-y-2">
-                <Label htmlFor="pose-prompt">Pose Description</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="pose-prompt">Pose Description</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-muted-foreground"
+                    onClick={() => setShowExamples((v) => !v)}
+                  >
+                    {showExamples ? "Hide examples" : "Examples"}
+                  </Button>
+                </div>
                 <Textarea
                   id="pose-prompt"
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="standing casually, one hand in pocket, leaning slightly forward, confident fashion pose..."
+                  placeholder="Describe the pose, body language, positioning..."
                   rows={4}
                 />
+                {showExamples && (
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {POSE_EXAMPLES.map((ex) => (
+                      <button
+                        key={ex.label}
+                        type="button"
+                        className="rounded-lg border border-border px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-muted/60 hover:text-foreground"
+                        onClick={() => {
+                          setPrompt(ex.text);
+                          setShowExamples(false);
+                        }}
+                      >
+                        <span className="font-medium text-foreground">{ex.label}</span>
+                        <br />
+                        {ex.text}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Reference images with notes */}
@@ -698,29 +765,37 @@ export default function PoseStagePage() {
               )}
 
               {/* Generate button */}
-              <Button
-                onClick={handleGenerate}
-                disabled={generating || refiningNotes || showNoteReview || !prompt.trim() || !!jobId}
-                className="w-full py-6 text-base"
-                data-tour="pose-generate"
+              <DisabledTooltip
+                message={
+                  !generating && !refiningNotes && !showNoteReview && !jobId && !prompt.trim()
+                    ? "Enter a pose description"
+                    : undefined
+                }
               >
-                {refiningNotes ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    Analyzing references...
-                  </>
-                ) : generating || jobId ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-5 w-5" />
-                    Generate Pose
-                  </>
-                )}
-              </Button>
+                <Button
+                  onClick={handleGenerate}
+                  disabled={generating || refiningNotes || showNoteReview || !prompt.trim() || !!jobId}
+                  className="w-full py-6 text-base"
+                  data-tour="pose-generate"
+                >
+                  {refiningNotes ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Analyzing references...
+                    </>
+                  ) : generating || jobId ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-5 w-5" />
+                      Generate Pose
+                    </>
+                  )}
+                </Button>
+              </DisabledTooltip>
 
               {/* Note review panel */}
               {showNoteReview && refinedNotes.length > 0 && (

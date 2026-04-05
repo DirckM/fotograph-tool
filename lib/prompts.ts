@@ -252,11 +252,11 @@ export function completenessCheckPrompt(
     ? `\nReference images provided:\n${imageDescriptions.map((d, i) => `- Image ${i + 1}: ${d}`).join("\n")}`
     : "";
 
-  if (isMaskRefinement) {
-    return `You are analyzing a mask refinement instruction for a ${stageName} image.
+  const taskDescription = isMaskRefinement
+    ? `You are analyzing a mask refinement instruction for a ${stageName} image.\n\nThe user has painted a mask on a specific region and wants to change it. Their instruction:\n"${userPrompt}"`
+    : `You are analyzing a prompt for ${stageName} image generation.\n\nUser's prompt:\n"${userPrompt}"`;
 
-The user has painted a mask on a specific region and wants to change it. Their instruction:
-"${userPrompt}"
+  return `${taskDescription}
 ${imageContext}
 
 Your job: identify details the user has NOT specified that could lead to undesirable results. Image generation models commonly produce artifacts when details are left ambiguous.
@@ -267,38 +267,19 @@ ${concerns}
 Respond with valid JSON only, no markdown:
 {
   "complete": true/false,
-  "questions": ["question 1", "question 2", ...]
+  "questions": [
+    {
+      "question": "Short question text",
+      "options": ["Option A", "Option B", "Option C", "Option D"]
+    }
+  ]
 }
 
 Rules:
 - Only flag genuinely ambiguous details that could produce visibly different results
 - Maximum 3 questions, each under 30 words
-- If the instruction is specific enough, return complete: true with empty questions
-- Focus on what the AI model will interpret differently without specification
-- Do NOT ask about things already specified in the prompt
-- Be practical, not pedantic — skip trivial details`;
-  }
-
-  return `You are analyzing a prompt for ${stageName} image generation.
-
-User's prompt:
-"${userPrompt}"
-${imageContext}
-
-Your job: identify details the user has NOT specified that could lead to undesirable results. Image generation models commonly produce artifacts when details are left ambiguous.
-
-Stage-specific concerns for ${stageName}:
-${concerns}
-
-Respond with valid JSON only, no markdown:
-{
-  "complete": true/false,
-  "questions": ["question 1", "question 2", ...]
-}
-
-Rules:
-- Only flag genuinely ambiguous details that could produce visibly different results
-- Maximum 3 questions, each under 30 words
+- Each question MUST have 3-5 concrete options that are the most likely/common choices
+- Options should be short labels (1-4 words each)
 - If the prompt is specific enough, return complete: true with empty questions
 - Focus on what the AI model will interpret differently without specification
 - Do NOT ask about things already specified in the prompt
@@ -308,20 +289,24 @@ Rules:
 export function completenessCheckChatPrompt(
   stageNum: number,
   originalPrompt: string,
-  questions: string[],
+  questionsAndAnswers: { question: string; answer: string }[],
   isMaskRefinement: boolean
 ): string {
   const stageName = stageNames[stageNum] ?? "unknown";
   const context = isMaskRefinement ? "mask refinement" : "generation";
 
+  const qaText = questionsAndAnswers
+    .map((qa, i) => `${i + 1}. Q: ${qa.question}\n   A: ${qa.answer}`)
+    .join("\n");
+
   return `You are helping a user refine their ${context} prompt for ${stageName}.
 
 Original prompt: "${originalPrompt}"
 
-Questions that were asked about unspecified details:
-${questions.map((q, i) => `${i + 1}. ${q}`).join("\n")}
+The user answered the following clarification questions:
+${qaText}
 
-Based on the user's responses, create an enhanced version of their original prompt that incorporates all the specified details naturally. The enhanced prompt should read as a single coherent instruction, not a list of answers.
+Create an enhanced version of their original prompt that incorporates all answers naturally. The enhanced prompt should read as a single coherent instruction, not a list of answers.
 
 You MUST respond with valid JSON only, no markdown:
 {

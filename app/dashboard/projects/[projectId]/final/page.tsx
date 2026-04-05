@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Image from "next/image";
 import { Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -20,8 +19,13 @@ const STAGE_LABELS: Record<number, string> = {
   4: "Garment",
 };
 
+const SUPABASE_STORAGE_BASE = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/project-assets/`;
+
 function getImageUrl(asset: ProjectAsset): string | null {
-  return asset.external_url ?? asset.storage_path ?? null;
+  if (asset.external_url) return asset.external_url;
+  if (!asset.storage_path) return null;
+  if (asset.storage_path.startsWith("http")) return asset.storage_path;
+  return `${SUPABASE_STORAGE_BASE}${asset.storage_path}`;
 }
 
 export default function FinalStagePage() {
@@ -31,6 +35,7 @@ export default function FinalStagePage() {
 
   const [project, setProject] = useState<Project | null>(null);
   const [allAssets, setAllAssets] = useState<ProjectAsset[]>([]);
+  const [stageResults, setStageResults] = useState<Record<number, string | null>>({});
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
@@ -38,17 +43,40 @@ export default function FinalStagePage() {
 
   const loadData = useCallback(async () => {
     try {
-      const [projectRes, assetsRes] = await Promise.all([
+      const [projectRes, assetsRes, stage2Res, stage3Res] = await Promise.all([
         fetch(`/api/projects/${projectId}`),
         fetch(`/api/projects/${projectId}/assets`),
+        fetch(`/api/projects/${projectId}/stage/2`),
+        fetch(`/api/projects/${projectId}/stage/3`),
       ]);
 
       if (projectRes.ok) {
         setProject(await projectRes.json());
       }
+      let assets: ProjectAsset[] = [];
       if (assetsRes.ok) {
-        setAllAssets(await assetsRes.json());
+        assets = await assetsRes.json();
+        setAllAssets(assets);
       }
+
+      const results: Record<number, string | null> = {};
+
+      // Stage 1: refined_face or generated_face asset
+      const face = assets.findLast((a) => a.asset_type === "refined_face")
+        ?? assets.findLast((a) => a.asset_type === "generated_face");
+      results[1] = face ? getImageUrl(face) : null;
+
+      // Stage 2 & 3: resultImage from stage state
+      if (stage2Res.ok) {
+        const s2 = await stage2Res.json();
+        results[2] = s2.state?.resultImage ?? null;
+      }
+      if (stage3Res.ok) {
+        const s3 = await stage3Res.json();
+        results[3] = s3.state?.resultImage ?? null;
+      }
+
+      setStageResults(results);
     } finally {
       setLoading(false);
     }
@@ -176,6 +204,13 @@ export default function FinalStagePage() {
       <StageLayout
         title={<>Stage 5: <span className="text-heading">Final</span> Compositing</>}
         description="Combine all approved assets into final composite images."
+        guide={[
+          "Review the summary below - it shows your approved model, environment, pose, and garments from all previous stages.",
+          "Click 'Generate Series' to composite everything together. The AI combines the model's face, the environment, the pose, and each garment into final photoshoot images.",
+          "You can generate multiple times to get different variations. Each generation adds to the gallery, nothing gets replaced.",
+          "When you're happy with the results, click 'Complete Project' to mark the project as finished.",
+        ]}
+        guideTip="Each generation creates one composite per garment. If you have 3 garments, you'll get 3 final images per generation. Use the tools (upscaler, face swap) from the sidebar to post-process individual results."
         aside={
           <div className="space-y-4">
             <div className="space-y-3">
@@ -210,44 +245,59 @@ export default function FinalStagePage() {
       >
         <div className="space-y-6 overflow-y-auto">
           <div className="space-y-3">
-            <Label className="text-sm text-muted-foreground" data-tour="final-assets">Asset Summary</Label>
+            <Label className="text-sm text-muted-foreground" data-tour="final-assets">Stage Results</Label>
             <div className="grid gap-4 sm:grid-cols-2">
-              {[1, 2, 3, 4].map((stage) => {
-                const stageAssets = assetsByStage(stage);
+              {[1, 2, 3].map((stage) => {
+                const url = stageResults[stage];
                 return (
                   <div key={stage} className="space-y-2 rounded-lg border border-border/50 p-3">
                     <p className="text-sm font-medium text-muted-foreground">
                       {STAGE_LABELS[stage]}
                     </p>
-                    {stageAssets.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">No assets</p>
-                    ) : (
-                      <div className="grid grid-cols-3 gap-1">
-                        {stageAssets.slice(0, 6).map((asset) => {
-                          const url = getImageUrl(asset);
-                          return url ? (
-                            <div
-                              key={asset.id}
-                              className="relative aspect-square overflow-hidden rounded"
-                            >
-                              <Image
-                                src={url}
-                                alt={asset.role ?? STAGE_LABELS[stage]}
-                                fill
-                                className="object-cover"
-                                sizes="80px"
-                              />
-                            </div>
-                          ) : null;
-                        })}
+                    {url ? (
+                      <div className="relative aspect-square overflow-hidden rounded">
+                        <img
+                          src={url}
+                          alt={STAGE_LABELS[stage]}
+                          className="absolute inset-0 h-full w-full object-cover"
+                        />
                       </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No result yet</p>
                     )}
-                    <p className="text-xs text-muted-foreground">
-                      {stageAssets.length} asset{stageAssets.length !== 1 && "s"}
-                    </p>
                   </div>
                 );
               })}
+              <div className="space-y-2 rounded-lg border border-border/50 p-3">
+                <p className="text-sm font-medium text-muted-foreground">
+                  {STAGE_LABELS[4]}
+                </p>
+                {(() => {
+                  const garments = allAssets.filter((a) => a.stage === 4 && a.asset_type === "garment_image");
+                  if (garments.length === 0) {
+                    return <p className="text-xs text-muted-foreground">No garments</p>;
+                  }
+                  return (
+                    <div className={`grid gap-1 ${garments.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+                      {garments.map((asset) => {
+                        const url = getImageUrl(asset);
+                        return url ? (
+                          <div
+                            key={asset.id}
+                            className="relative aspect-square overflow-hidden rounded"
+                          >
+                            <img
+                              src={url}
+                              alt="Garment"
+                              className="absolute inset-0 h-full w-full object-cover"
+                            />
+                          </div>
+                        ) : null;
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
           </div>
 

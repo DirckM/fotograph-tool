@@ -50,7 +50,10 @@ export async function POST(
       const checkPrompt = completenessCheckPrompt(stageNum, activePrompt, true);
       const checkResult = await generateText(checkPrompt);
       const cleaned = checkResult.replace(/```json?\n?/g, "").replace(/```/g, "").trim();
-      const parsed = JSON.parse(cleaned) as { complete: boolean; questions: string[] };
+      const parsed = JSON.parse(cleaned) as {
+        complete: boolean;
+        questions: { question: string; options: string[] }[];
+      };
 
       if (!parsed.complete && parsed.questions?.length > 0) {
         return NextResponse.json({

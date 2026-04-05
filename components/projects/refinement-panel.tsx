@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ImageLightbox } from "@/components/ui/image-lightbox";
 import { cn } from "@/lib/utils";
+import { DisabledTooltip } from "@/components/ui/disabled-tooltip";
 import { MaskCanvas } from "./mask-canvas";
 
 interface RefinementControlsProps {
@@ -57,6 +58,13 @@ export function RefinementControls({
   }, [maskDataUrl, prompt, referenceImages, selectedRefs, onRefine]);
 
   const canSubmit = !!maskDataUrl && prompt.trim().length > 0 && !isProcessing;
+
+  const disabledReason = !isProcessing
+    ? [
+        !maskDataUrl && "Paint a mask on the image",
+        !prompt.trim() && "Enter a refinement description",
+      ].filter(Boolean).join(" and ") || undefined
+    : undefined;
 
   return (
     <div className="flex flex-col gap-4">
@@ -116,24 +124,26 @@ export function RefinementControls({
         </div>
       )}
 
-      <Button
-        onClick={handleRefine}
-        disabled={!canSubmit}
-        className="w-full"
-        size="lg"
-      >
-        {isProcessing ? (
-          <>
-            <Loader2 className="animate-spin" data-icon="inline-start" />
-            Processing...
-          </>
-        ) : (
-          <>
-            <Wand2 data-icon="inline-start" />
-            Refine
-          </>
-        )}
-      </Button>
+      <DisabledTooltip message={!canSubmit ? disabledReason : undefined}>
+        <Button
+          onClick={handleRefine}
+          disabled={!canSubmit}
+          className="w-full"
+          size="lg"
+        >
+          {isProcessing ? (
+            <>
+              <Loader2 className="animate-spin" data-icon="inline-start" />
+              Processing...
+            </>
+          ) : (
+            <>
+              <Wand2 data-icon="inline-start" />
+              Refine
+            </>
+          )}
+        </Button>
+      </DisabledTooltip>
     </div>
   );
 }

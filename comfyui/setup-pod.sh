@@ -28,6 +28,7 @@ if [ ! -d "$COMFY_DIR" ]; then
   cd custom_nodes
   git clone https://github.com/ltdrdata/ComfyUI-Manager.git
   cd "$COMFY_DIR"
+  pip3 install -U --pre comfyui-manager
 fi
 
 # ─── First boot: install everything ───
@@ -141,4 +142,4 @@ fi
 # ─── Start ComfyUI ───
 log "Starting ComfyUI..."
 cd "$COMFY_DIR"
-python3 main.py --listen 0.0.0.0 --port 8188
+python3 main.py --listen 0.0.0.0 --port 8188 --enable-manager

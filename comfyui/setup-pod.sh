@@ -67,6 +67,24 @@ if [ ! -f "$SETUP_MARKER" ]; then
   log "Installing rgthree-comfy..."
   git clone https://github.com/rgthree/rgthree-comfy.git 2>/dev/null || true
 
+  log "Installing comfyui-art-venture..."
+  if [ ! -d "comfyui-art-venture" ]; then
+    git clone https://github.com/sipherxyz/comfyui-art-venture.git
+    cd comfyui-art-venture && pip3 install -r requirements.txt 2>/dev/null; cd "$CUSTOM_NODES"
+  fi
+
+  log "Installing comfyui-mixlab-nodes..."
+  git clone https://github.com/shadowcz007/comfyui-mixlab-nodes.git 2>/dev/null || true
+
+  log "Installing was-node-suite..."
+  if [ ! -d "was-node-suite-comfyui" ]; then
+    git clone https://github.com/WASasquatch/was-node-suite-comfyui.git
+    cd was-node-suite-comfyui && pip3 install -r requirements.txt 2>/dev/null; cd "$CUSTOM_NODES"
+  fi
+
+  log "Installing ComfyUI_FaceAnalysis..."
+  git clone https://github.com/cubiq/ComfyUI_FaceAnalysis.git 2>/dev/null || true
+
   # Pip deps
   log "Installing insightface..."
   pip3 install insightface onnxruntime-gpu

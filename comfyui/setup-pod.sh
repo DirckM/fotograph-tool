@@ -87,8 +87,8 @@ if [ ! -f "$SETUP_MARKER" ]; then
   git clone https://github.com/cubiq/ComfyUI_FaceAnalysis.git 2>/dev/null || true
 
   # Pip deps
-  log "Installing insightface..."
-  pip3 install insightface onnxruntime-gpu
+  log "Installing insightface and other dependencies..."
+  pip3 install insightface onnxruntime-gpu pyOpenSSL watchdog
 
   # Model directories
   mkdir -p "$MODELS/checkpoints"
@@ -142,4 +142,4 @@ fi
 # ─── Start ComfyUI ───
 log "Starting ComfyUI..."
 cd "$COMFY_DIR"
-python3 main.py --listen 0.0.0.0 --port 8188 --enable-manager
+python3 main.py --listen 0.0.0.0 --port 8188 --enable-manager --enable-cors-header "*"

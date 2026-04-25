@@ -1,7 +1,10 @@
 #!/bin/bash
 # ComfyUI RunPod auto-setup script
-# First boot: installs custom nodes + downloads models (~10-15 min)
-# Subsequent boots: starts ComfyUI immediately
+# First boot: clones repos + downloads models (~10-15 min)
+# Subsequent boots: verifies pip deps, then starts ComfyUI (~30s)
+#
+# Network volume persists: git repos, models
+# Container is ephemeral: pip packages reinstalled each boot if missing
 #
 # Usage in RunPod template "Docker Command":
 #   bash -c "wget -qO /tmp/setup.sh https://raw.githubusercontent.com/DirckM/fotograph-tool/main/comfyui/setup-pod.sh && bash /tmp/setup.sh"
@@ -16,86 +19,55 @@ SETUP_MARKER="/workspace/.comfyui-setup-complete"
 # ─── Helper ───
 log() { echo "[$(date '+%H:%M:%S')] $1"; }
 
-# ─── Install ComfyUI if not on volume yet ───
+# ─── Clone ComfyUI if not on volume yet ───
 if [ ! -d "$COMFY_DIR" ]; then
   log "ComfyUI not found on volume, cloning..."
   cd /workspace
   git clone https://github.com/comfyanonymous/ComfyUI.git
-  cd ComfyUI
-  pip3 install -r requirements.txt
-
-  # Install ComfyUI Manager
-  cd custom_nodes
+  cd "$COMFY_DIR/custom_nodes"
   git clone https://github.com/ltdrdata/ComfyUI-Manager.git
-  cd "$COMFY_DIR"
-  pip3 install -U --pre comfyui-manager
 fi
 
-# ─── First boot: install everything ───
+# ─── Ensure ComfyUI core pip deps (every boot) ───
+log "Checking ComfyUI core dependencies..."
+pip3 install -q -r "$COMFY_DIR/requirements.txt"
+pip3 install -q -U --pre comfyui-manager
+
+# ─── First boot: clone custom nodes + download models ───
 if [ ! -f "$SETUP_MARKER" ]; then
-  log "First boot detected - installing custom nodes and models..."
+  log "First boot detected - cloning custom nodes and downloading models..."
 
   cd "$CUSTOM_NODES"
 
-  # Custom nodes
-  log "Installing ComfyUI_IPAdapter_plus..."
-  git clone https://github.com/cubiq/ComfyUI_IPAdapter_plus.git 2>/dev/null || true
+  declare -A NODES=(
+    ["ComfyUI_IPAdapter_plus"]="https://github.com/cubiq/ComfyUI_IPAdapter_plus.git"
+    ["comfyui_controlnet_aux"]="https://github.com/Fannovel16/comfyui_controlnet_aux.git"
+    ["ComfyUI-Impact-Pack"]="https://github.com/ltdrdata/ComfyUI-Impact-Pack.git"
+    ["ComfyUI-Inspire-Pack"]="https://github.com/ltdrdata/ComfyUI-Inspire-Pack.git"
+    ["ComfyUI_essentials"]="https://github.com/cubiq/ComfyUI_essentials.git"
+    ["rgthree-comfy"]="https://github.com/rgthree/rgthree-comfy.git"
+    ["comfyui-art-venture"]="https://github.com/sipherxyz/comfyui-art-venture.git"
+    ["comfyui-mixlab-nodes"]="https://github.com/shadowcz007/comfyui-mixlab-nodes.git"
+    ["was-node-suite-comfyui"]="https://github.com/WASasquatch/was-node-suite-comfyui.git"
+    ["ComfyUI_FaceAnalysis"]="https://github.com/cubiq/ComfyUI_FaceAnalysis.git"
+  )
 
-  log "Installing comfyui_controlnet_aux..."
-  if [ ! -d "comfyui_controlnet_aux" ]; then
-    git clone https://github.com/Fannovel16/comfyui_controlnet_aux.git
-    cd comfyui_controlnet_aux && pip3 install -r requirements.txt && cd "$CUSTOM_NODES"
+  for node in "${!NODES[@]}"; do
+    if [ ! -d "$node" ]; then
+      log "Cloning $node..."
+      git clone "${NODES[$node]}" 2>/dev/null || true
+    fi
+  done
+
+  # Impact Pack extra install script
+  if [ -f "$CUSTOM_NODES/ComfyUI-Impact-Pack/install.py" ]; then
+    cd "$CUSTOM_NODES/ComfyUI-Impact-Pack"
+    python3 install.py 2>/dev/null || true
+    cd "$CUSTOM_NODES"
   fi
-
-  log "Installing ComfyUI-Impact-Pack..."
-  if [ ! -d "ComfyUI-Impact-Pack" ]; then
-    git clone https://github.com/ltdrdata/ComfyUI-Impact-Pack.git
-    cd ComfyUI-Impact-Pack && pip3 install -r requirements.txt && python3 install.py && cd "$CUSTOM_NODES"
-  fi
-
-  log "Installing ComfyUI-Inspire-Pack..."
-  if [ ! -d "ComfyUI-Inspire-Pack" ]; then
-    git clone https://github.com/ltdrdata/ComfyUI-Inspire-Pack.git
-    cd ComfyUI-Inspire-Pack && pip3 install -r requirements.txt 2>/dev/null || true && cd "$CUSTOM_NODES"
-  fi
-
-  log "Installing ComfyUI_essentials..."
-  if [ ! -d "ComfyUI_essentials" ]; then
-    git clone https://github.com/cubiq/ComfyUI_essentials.git
-    cd ComfyUI_essentials && pip3 install -r requirements.txt 2>/dev/null || true && cd "$CUSTOM_NODES"
-  fi
-
-  log "Installing rgthree-comfy..."
-  git clone https://github.com/rgthree/rgthree-comfy.git 2>/dev/null || true
-
-  log "Installing comfyui-art-venture..."
-  if [ ! -d "comfyui-art-venture" ]; then
-    git clone https://github.com/sipherxyz/comfyui-art-venture.git
-    cd comfyui-art-venture && pip3 install -r requirements.txt 2>/dev/null; cd "$CUSTOM_NODES"
-  fi
-
-  log "Installing comfyui-mixlab-nodes..."
-  git clone https://github.com/shadowcz007/comfyui-mixlab-nodes.git 2>/dev/null || true
-
-  log "Installing was-node-suite..."
-  if [ ! -d "was-node-suite-comfyui" ]; then
-    git clone https://github.com/WASasquatch/was-node-suite-comfyui.git
-    cd was-node-suite-comfyui && pip3 install -r requirements.txt 2>/dev/null; cd "$CUSTOM_NODES"
-  fi
-
-  log "Installing ComfyUI_FaceAnalysis..."
-  git clone https://github.com/cubiq/ComfyUI_FaceAnalysis.git 2>/dev/null || true
-
-  # Pip deps
-  log "Installing insightface and other dependencies..."
-  pip3 install insightface onnxruntime-gpu pyOpenSSL watchdog
 
   # Model directories
-  mkdir -p "$MODELS/checkpoints"
-  mkdir -p "$MODELS/controlnet"
-  mkdir -p "$MODELS/ipadapter"
-  mkdir -p "$MODELS/clip_vision"
-  mkdir -p "$MODELS/insightface/models/buffalo_l"
+  mkdir -p "$MODELS"/{checkpoints,controlnet,ipadapter,clip_vision,insightface/models/buffalo_l}
 
   # Download models
   log "Downloading RealVisXL V4.0 Lightning checkpoint (~6GB)..."
@@ -132,12 +104,24 @@ if [ ! -f "$SETUP_MARKER" ]; then
     rm buffalo_l.zip
   fi
 
-  # Mark setup complete
   date > "$SETUP_MARKER"
-  log "Setup complete! Marker written to $SETUP_MARKER"
+  log "First boot setup complete!"
 else
-  log "Setup marker found - skipping install (delete $SETUP_MARKER to force reinstall)"
+  log "Network volume ready (repos and models present)"
 fi
+
+# ─── Ensure custom node pip deps (every boot) ───
+log "Checking custom node pip dependencies..."
+for node in comfyui_controlnet_aux ComfyUI-Impact-Pack ComfyUI-Inspire-Pack \
+            ComfyUI_essentials comfyui-art-venture was-node-suite-comfyui; do
+  if [ -f "$CUSTOM_NODES/$node/requirements.txt" ]; then
+    pip3 install -q -r "$CUSTOM_NODES/$node/requirements.txt" 2>/dev/null || true
+  fi
+done
+
+log "Checking standalone pip packages..."
+pip3 install -q insightface onnxruntime-gpu pyOpenSSL watchdog 2>/dev/null || true
+log "Dependencies verified."
 
 # ─── Start ComfyUI ───
 log "Starting ComfyUI..."

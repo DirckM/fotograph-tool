@@ -28,6 +28,13 @@ if [ ! -d "$COMFY_DIR" ]; then
   git clone https://github.com/ltdrdata/ComfyUI-Manager.git
 fi
 
+# ─── Verify PyTorch matches CUDA driver (every boot) ───
+log "Checking PyTorch / CUDA compatibility..."
+if ! python3 -c "import torch; assert torch.cuda.is_available()" 2>/dev/null; then
+  log "PyTorch CUDA mismatch detected - reinstalling for CUDA 12.4 (compatible with most drivers)..."
+  pip3 install -q torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+fi
+
 # ─── Ensure ComfyUI core pip deps (every boot) ───
 log "Checking ComfyUI core dependencies..."
 pip3 install -q -r "$COMFY_DIR/requirements.txt"

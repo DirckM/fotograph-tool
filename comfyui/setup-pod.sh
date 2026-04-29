@@ -100,7 +100,7 @@ if [ ! -f "$SETUP_MARKER" ]; then
     cd /tmp
     wget -q --show-progress -O buffalo_l.zip \
       "https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip"
-    unzip -o buffalo_l.zip -d "$MODELS/insightface/models/buffalo_l/"
+    python3 -c "import zipfile; zipfile.ZipFile('/tmp/buffalo_l.zip').extractall('$MODELS/insightface/models/buffalo_l/')"
     rm buffalo_l.zip
   fi
 

@@ -31,8 +31,11 @@ fi
 # ─── Verify torch stack matches CUDA driver + each other (every boot) ───
 log "Checking PyTorch / CUDA / torchaudio compatibility..."
 if ! python3 -c "import torch, torchvision, torchaudio; assert torch.cuda.is_available()" 2>/dev/null; then
-  log "Torch stack mismatch detected - reinstalling torch+torchvision+torchaudio for CUDA 12.4..."
-  pip3 install -q --force-reinstall torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+  log "Torch stack mismatch detected - cleaning old install to free disk space..."
+  pip3 uninstall -y -q torch torchvision torchaudio 2>/dev/null || true
+  pip3 cache purge 2>/dev/null || true
+  log "Reinstalling torch+torchvision+torchaudio for CUDA 12.4..."
+  pip3 install --no-cache-dir -q torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 fi
 
 # ─── Ensure ComfyUI core pip deps (every boot) ───

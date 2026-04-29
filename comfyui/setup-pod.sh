@@ -1,31 +1,46 @@
 #!/bin/bash
 # ComfyUI RunPod boot script
 #
-# Assumes the official RunPod template `runpod/stable-diffusion:comfy-ui-6.0.0`
-# with the network volume `advanced_azure_pig` (100GB) attached.
+# Assumes:
+#   - Pod template: runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+#   - Network volume: 100GB, mounted at /workspace
+#   - ComfyUI + custom nodes + models already on the volume at /workspace/ComfyUI
+#   - Pod has port 3000 exposed
 #
-# ComfyUI + custom nodes + models all live at /workspace/ComfyUI/ComfyUI on the
-# network volume - nothing to install, just patch the start path and run.
+# Each pod reset wipes the container disk (pip packages live there), so this
+# script reinstalls pip deps from the requirements files on the volume every boot.
+# Repos and models on the volume are not touched.
 #
 # Usage in RunPod template "Docker Command":
 #   bash -c "wget -qO /tmp/setup.sh https://raw.githubusercontent.com/DirckM/fotograph-tool/main/comfyui/setup-pod.sh && bash /tmp/setup.sh"
 
 set -e
 
-COMFY_DIR="/workspace/ComfyUI/ComfyUI"
-PRE_START="/pre_start.sh"
+COMFY_DIR="/workspace/ComfyUI"
+CUSTOM_NODES="$COMFY_DIR/custom_nodes"
 PORT=3000
 
 log() { echo "[$(date '+%H:%M:%S')] $1"; }
 
-# Patch the official pre_start so any container-level lifecycle hooks point at
-# the correct nested ComfyUI path on the volume.
-if [ -f "$PRE_START" ]; then
-  log "Patching $PRE_START to use $COMFY_DIR..."
-  sed -i "s|cd /ComfyUI|cd $COMFY_DIR|" "$PRE_START"
+if [ ! -f "$COMFY_DIR/main.py" ]; then
+  log "ERROR: ComfyUI not found at $COMFY_DIR. The network volume must be attached."
+  exit 1
 fi
 
-log "Stopping any ComfyUI started by the runpod image..."
+log "Installing ComfyUI core requirements..."
+pip3 install -q -r "$COMFY_DIR/requirements.txt"
+
+log "Installing custom node requirements..."
+for req in "$CUSTOM_NODES"/*/requirements.txt; do
+  [ -f "$req" ] || continue
+  log "  $(dirname "$req" | xargs basename)"
+  pip3 install -q -r "$req" 2>/dev/null || true
+done
+
+log "Installing standalone pip packages..."
+pip3 install -q insightface onnxruntime-gpu pyOpenSSL watchdog 2>/dev/null || true
+
+log "Stopping any running ComfyUI on port $PORT..."
 pkill -f "python.*main.py.*--port.*$PORT" 2>/dev/null || true
 sleep 2
 

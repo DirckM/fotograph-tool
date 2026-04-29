@@ -33,6 +33,9 @@ log "Checking PyTorch / CUDA / torchaudio compatibility..."
 if ! python3 -c "import torch, torchvision, torchaudio; assert torch.cuda.is_available()" 2>/dev/null; then
   log "Torch stack mismatch detected - cleaning old install to free disk space..."
   pip3 uninstall -y -q torch torchvision torchaudio 2>/dev/null || true
+  # Also remove bundled CUDA libs (~4.7GB) so the new torch's matching versions can install cleanly
+  pip3 list 2>/dev/null | awk '/^nvidia-/ {print $1}' | xargs -r pip3 uninstall -y -q 2>/dev/null || true
+  pip3 uninstall -y -q triton 2>/dev/null || true
   pip3 cache purge 2>/dev/null || true
   log "Reinstalling torch+torchvision+torchaudio for CUDA 12.4..."
   pip3 install --no-cache-dir -q torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124

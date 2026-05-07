@@ -59,14 +59,26 @@ done
 log "Installing standalone pip packages..."
 pip3 install -q insightface onnxruntime-gpu pyOpenSSL watchdog 2>/dev/null || true
 
-# ComfyUI requirements.txt installs torch from PyPI default (cu121), but the
-# runpod-slim image ships cu124 torchaudio. The mismatch fatals at startup with
-# "PyTorch and TorchAudio were compiled with different CUDA versions". Force
-# reinstall the matched stack here so the import order gives all-cu124.
-log "Aligning torch+vision+audio to cu124 (overrides cu121 from requirements.txt)..."
-pip3 install -q --no-cache-dir --force-reinstall \
+# ComfyUI requirements.txt silently downgrades torch to the PyPI default wheel
+# (cu121), which mismatches the cu124 torchaudio shipped in the pytorch image.
+# ComfyUI then fatals at startup with "PyTorch and TorchAudio were compiled
+# with different CUDA versions". The 20GB container disk is too small to hold
+# both the cu121 and cu124 wheels simultaneously, so --force-reinstall fails
+# with "No space left on device". Pattern: uninstall the cu121 stack + the
+# nvidia/triton wheels it pulled in, purge the pip cache, then install the
+# matched cu124 stack fresh.
+log "Aligning torch+vision+audio to cu124 (uninstall cu121 + purge cache first)..."
+pip3 uninstall -y -q torch torchvision torchaudio 2>&1 | tail -1 || true
+NVIDIA_PKGS=$(pip3 list 2>/dev/null | awk '/^nvidia-|^triton/ {print $1}' | xargs)
+if [ -n "$NVIDIA_PKGS" ]; then
+  log "  uninstalling nvidia/triton wheels: $NVIDIA_PKGS"
+  pip3 uninstall -y -q $NVIDIA_PKGS 2>&1 | tail -1 || true
+fi
+pip3 cache purge >/dev/null 2>&1 || true
+pip3 install -q --no-cache-dir \
   torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 \
   --index-url https://download.pytorch.org/whl/cu124 2>&1 | tail -2
+python -c 'import torch, torchaudio; print(f"  torch={torch.__version__}, audio={torchaudio.__version__}")'
 
 log "Stopping any running ComfyUI on port $PORT..."
 pkill -f "python.*main.py.*--port.*$PORT" 2>/dev/null || true

@@ -1,0 +1,184 @@
+{
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "realvisxlV40_v40LightningBakedvae.safetensors"
+    }
+  },
+  "25": {
+    "class_type": "LoadImagesFromDir //Inspire",
+    "inputs": {
+      "directory": "/workspace/ComfyUI/input/faces/model1_final",
+      "image_load_cap": 0,
+      "start_index": 0,
+      "load_always": false
+    }
+  },
+  "30": {
+    "class_type": "IPAdapterUnifiedLoaderFaceID",
+    "inputs": {
+      "preset": "FACEID PLUS V2",
+      "lora_strength": 0.6,
+      "provider": "CUDA",
+      "model": [
+        "4",
+        0
+      ]
+    }
+  },
+  "31": {
+    "class_type": "IPAdapterFaceID",
+    "inputs": {
+      "weight": 0.85,
+      "weight_faceidv2": 1.0,
+      "weight_type": "linear",
+      "combine_embeds": "average",
+      "start_at": 0,
+      "end_at": 1,
+      "embeds_scaling": "V only",
+      "model": [
+        "30",
+        0
+      ],
+      "ipadapter": [
+        "30",
+        1
+      ],
+      "image": [
+        "25",
+        0
+      ]
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "full body photograph of a beautiful woman with long flowing brown wavy hair, plain studio background, soft even lighting, fashion editorial photography, sharp focus, 4k, magazine quality, photorealistic, detailed skin, well-defined hands and fingers",
+      "clip": [
+        "4",
+        1
+      ]
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "twin, two faces, multiple subjects, duplicate, low quality, blurry, deformed face, asymmetrical, extra limbs, extra fingers, missing fingers, distorted hands, mutated hands, jpeg artifacts, text, watermark, nsfw, cartoon, painting, 3d render, cropped",
+      "clip": [
+        "4",
+        1
+      ]
+    }
+  },
+  "5": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 832,
+      "height": 1216,
+      "batch_size": 2
+    }
+  },
+  "14": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "POSE_CELL_PLACEHOLDER",
+      "upload": "image"
+    }
+  },
+  "15": {
+    "class_type": "DWPreprocessor",
+    "inputs": {
+      "detect_hand": "enable",
+      "detect_body": "enable",
+      "detect_face": "disable",
+      "resolution": 1024,
+      "bbox_detector": "yolox_l.onnx",
+      "pose_estimator": "dw-ll_ucoco_384.onnx",
+      "scale_stick_for_xinsr_cn": "disable",
+      "image": [
+        "14",
+        0
+      ]
+    }
+  },
+  "16": {
+    "class_type": "ControlNetLoader",
+    "inputs": {
+      "control_net_name": "OpenPoseXL2.safetensors"
+    }
+  },
+  "17": {
+    "class_type": "ControlNetApplyAdvanced",
+    "inputs": {
+      "strength": 1.0,
+      "start_percent": 0,
+      "end_percent": 0.85,
+      "positive": [
+        "6",
+        0
+      ],
+      "negative": [
+        "7",
+        0
+      ],
+      "control_net": [
+        "16",
+        0
+      ],
+      "image": [
+        "15",
+        0
+      ]
+    }
+  },
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0,
+      "steps": 8,
+      "cfg": 1.8,
+      "sampler_name": "dpmpp_sde",
+      "scheduler": "karras",
+      "denoise": 1.0,
+      "model": [
+        "31",
+        0
+      ],
+      "positive": [
+        "17",
+        0
+      ],
+      "negative": [
+        "17",
+        1
+      ],
+      "latent_image": [
+        "5",
+        0
+      ]
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "3",
+        0
+      ],
+      "vae": [
+        "4",
+        2
+      ]
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "8",
+        0
+      ],
+      "filename_prefix": "model1_pose_locked"
+    }
+  }
+}

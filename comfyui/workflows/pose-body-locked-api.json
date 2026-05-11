@@ -53,7 +53,7 @@
   "6": {
     "class_type": "CLIPTextEncode",
     "inputs": {
-      "text": "full body photograph of a beautiful woman with long flowing brown wavy hair, plain studio background, soft even lighting, fashion editorial photography, sharp focus, 4k, magazine quality, photorealistic, detailed skin, well-defined hands and fingers",
+      "text": "full body photograph of a beautiful woman with long flowing brown wavy hair, fully clothed in a modest stylish outfit, plain studio background, soft even lighting, fashion editorial photography, sharp focus, 4k, magazine quality, photorealistic, detailed skin, well-defined hands and fingers",
       "clip": [
         "4",
         1
@@ -63,7 +63,7 @@
   "7": {
     "class_type": "CLIPTextEncode",
     "inputs": {
-      "text": "twin, two faces, multiple subjects, duplicate, low quality, blurry, deformed face, asymmetrical, extra limbs, extra fingers, missing fingers, distorted hands, mutated hands, jpeg artifacts, text, watermark, nsfw, cartoon, painting, 3d render, cropped",
+      "text": "(nude:1.5), (naked:1.5), (topless:1.5), (undressed:1.4), bare chest, exposed breasts, lingerie only, underwear only, (nsfw:1.4), twin, two faces, multiple subjects, duplicate, low quality, blurry, deformed face, asymmetrical, extra limbs, extra fingers, missing fingers, distorted hands, mutated hands, jpeg artifacts, text, watermark, cartoon, painting, 3d render, cropped",
       "clip": [
         "4",
         1

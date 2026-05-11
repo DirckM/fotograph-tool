@@ -1,0 +1,93 @@
+{
+  "_comment": "Production workflow v1 - full-body shots with FaceID Plus v2 identity lock from /input/faces/model1/. No face/hand refinement yet. Generates batch=2 per run at 832x1216.",
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "realvisxlV40_v40LightningBakedvae.safetensors"
+    }
+  },
+  "25": {
+    "class_type": "LoadImagesFromDir //Inspire",
+    "inputs": {
+      "directory": "/workspace/ComfyUI/input/faces/model1",
+      "image_load_cap": 0,
+      "start_index": 0,
+      "load_always": false
+    }
+  },
+  "30": {
+    "class_type": "IPAdapterUnifiedLoaderFaceID",
+    "inputs": {
+      "preset": "FACEID PLUS V2",
+      "lora_strength": 0.6,
+      "provider": "CUDA",
+      "model": ["4", 0]
+    }
+  },
+  "31": {
+    "class_type": "IPAdapterFaceID",
+    "inputs": {
+      "weight": 0.85,
+      "weight_faceidv2": 1.0,
+      "weight_type": "linear",
+      "combine_embeds": "average",
+      "start_at": 0,
+      "end_at": 1,
+      "embeds_scaling": "V only",
+      "model": ["30", 0],
+      "ipadapter": ["30", 1],
+      "image": ["25", 0]
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "PROMPT_PLACEHOLDER",
+      "clip": ["4", 1]
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "twin, two faces, two people, multiple subjects, duplicate, sisters, mirror image, low quality, blurry, deformed face, asymmetrical, extra limbs, extra fingers, mutated, missing fingers, jpeg artifacts, text, watermark, nsfw, cartoon, illustration, painting, 3d render, short hair, pixie cut",
+      "clip": ["4", 1]
+    }
+  },
+  "5": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 832,
+      "height": 1216,
+      "batch_size": 2
+    }
+  },
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0,
+      "steps": 8,
+      "cfg": 1.8,
+      "sampler_name": "dpmpp_sde",
+      "scheduler": "karras",
+      "denoise": 1.0,
+      "model": ["31", 0],
+      "positive": ["6", 0],
+      "negative": ["7", 0],
+      "latent_image": ["5", 0]
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["3", 0],
+      "vae": ["4", 2]
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["8", 0],
+      "filename_prefix": "model1_production"
+    }
+  }
+}

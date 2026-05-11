@@ -59,6 +59,13 @@ done
 log "Installing standalone pip packages..."
 pip3 install -q insightface onnxruntime-gpu pyOpenSSL watchdog 2>/dev/null || true
 
+# transformers >= 4.50 registers custom ops with infer_schema signatures that
+# only torch >= 2.5 supports. ComfyUI requirements pull in the latest
+# transformers, which then crashes when comfyui_controlnet_aux imports the Zoe
+# depth model. Pin to a torch-2.4-compatible version.
+log "Pinning transformers<4.50 for torch 2.4.1 compatibility..."
+pip3 install -q --no-cache-dir 'transformers<4.50' 2>&1 | tail -1
+
 # ComfyUI requirements.txt silently downgrades torch to the PyPI default wheel
 # (cu121), which mismatches the cu124 torchaudio shipped in the pytorch image.
 # ComfyUI then fatals at startup with "PyTorch and TorchAudio were compiled

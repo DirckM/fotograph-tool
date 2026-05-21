@@ -42,3 +42,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 logs/
+
+# training dataset (6.2GB of client photos — lives on the RunPod volume, not git)
+/Training Images/

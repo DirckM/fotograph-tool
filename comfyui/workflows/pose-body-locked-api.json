@@ -5,6 +5,16 @@
       "ckpt_name": "realvisxlV40_v40LightningBakedvae.safetensors"
     }
   },
+  "40": {
+    "class_type": "LoraLoader",
+    "inputs": {
+      "lora_name": "wkeditf-editorial-v1.safetensors",
+      "strength_model": 0.85,
+      "strength_clip": 0.85,
+      "model": ["4", 0],
+      "clip": ["4", 1]
+    }
+  },
   "25": {
     "class_type": "LoadImagesFromDir //Inspire",
     "inputs": {
@@ -21,7 +31,7 @@
       "lora_strength": 0.6,
       "provider": "CUDA",
       "model": [
-        "4",
+        "40",
         0
       ]
     }
@@ -55,7 +65,7 @@
     "inputs": {
       "text": "full body photograph of a beautiful woman with long flowing brown wavy hair, fully clothed in a modest stylish outfit, plain studio background, soft even lighting, fashion editorial photography, sharp focus, 4k, magazine quality, photorealistic, detailed skin, well-defined hands and fingers",
       "clip": [
-        "4",
+        "40",
         1
       ]
     }
@@ -65,7 +75,7 @@
     "inputs": {
       "text": "(nude:1.5), (naked:1.5), (topless:1.5), (undressed:1.4), bare chest, exposed breasts, lingerie only, underwear only, (nsfw:1.4), twin, two faces, multiple subjects, duplicate, low quality, blurry, deformed face, asymmetrical, extra limbs, extra fingers, missing fingers, distorted hands, mutated hands, jpeg artifacts, text, watermark, cartoon, painting, 3d render, cropped",
       "clip": [
-        "4",
+        "40",
         1
       ]
     }

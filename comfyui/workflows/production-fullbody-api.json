@@ -1,9 +1,19 @@
 {
-  "_comment": "Production workflow v1 - full-body shots with FaceID Plus v2 identity lock from /input/faces/model1/. No face/hand refinement yet. Generates batch=2 per run at 832x1216.",
+  "_comment": "Production workflow v2 - full-body shots with FaceID Plus v2 identity lock from /input/faces/model1/, plus the wkeditf editorial style LoRA at 0.85. Generates batch=2 per run at 832x1216.",
   "4": {
     "class_type": "CheckpointLoaderSimple",
     "inputs": {
       "ckpt_name": "realvisxlV40_v40LightningBakedvae.safetensors"
+    }
+  },
+  "40": {
+    "class_type": "LoraLoader",
+    "inputs": {
+      "lora_name": "wkeditf-editorial-v1.safetensors",
+      "strength_model": 0.85,
+      "strength_clip": 0.85,
+      "model": ["4", 0],
+      "clip": ["40", 1]
     }
   },
   "25": {
@@ -21,7 +31,7 @@
       "preset": "FACEID PLUS V2",
       "lora_strength": 0.6,
       "provider": "CUDA",
-      "model": ["4", 0]
+      "model": ["40", 0]
     }
   },
   "31": {
@@ -43,14 +53,14 @@
     "class_type": "CLIPTextEncode",
     "inputs": {
       "text": "PROMPT_PLACEHOLDER",
-      "clip": ["4", 1]
+      "clip": ["40", 1]
     }
   },
   "7": {
     "class_type": "CLIPTextEncode",
     "inputs": {
       "text": "twin, two faces, two people, multiple subjects, duplicate, sisters, mirror image, low quality, blurry, deformed face, asymmetrical, extra limbs, extra fingers, mutated, missing fingers, jpeg artifacts, text, watermark, nsfw, cartoon, illustration, painting, 3d render, short hair, pixie cut",
-      "clip": ["4", 1]
+      "clip": ["40", 1]
     }
   },
   "5": {

@@ -19,7 +19,10 @@ set -e
 COMFY_DIR="/workspace/ComfyUI"
 CUSTOM_NODES="$COMFY_DIR/custom_nodes"
 PORT=3000
-SSH_PUBKEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHrARsjmtAhsmwzi4fpJgTjuUn53l2lcJhV4laSVBunn dirckmulder20@gmail.com"
+SSH_PUBKEYS=(
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHrARsjmtAhsmwzi4fpJgTjuUn53l2lcJhV4laSVBunn dirckmulder20@gmail.com"
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICVWNTEauvE20gD7jJFlvqk2b4IvJh9z3fHebA9oG7Yr dirckmulder20@gmail.com"
+)
 
 log() { echo "[$(date '+%H:%M:%S')] $1"; }
 
@@ -33,8 +36,10 @@ fi
 # be re-installed each boot. The pod has TCP port 22 exposed in its template.
 log "Setting up sshd..."
 mkdir -p ~/.ssh
-grep -qF "${SSH_PUBKEY%% *}" ~/.ssh/authorized_keys 2>/dev/null \
-  || echo "$SSH_PUBKEY" >> ~/.ssh/authorized_keys
+touch ~/.ssh/authorized_keys
+for key in "${SSH_PUBKEYS[@]}"; do
+  grep -qF "$key" ~/.ssh/authorized_keys || echo "$key" >> ~/.ssh/authorized_keys
+done
 chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys
 if ! command -v sshd >/dev/null 2>&1; then
   apt-get update -qq

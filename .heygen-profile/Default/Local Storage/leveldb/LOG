@@ -1,0 +1,5 @@
+2026/06/23-14:36:03.905 2b105 Reusing MANIFEST /Users/dirckmulder/Documents/Project Hub/fotograph-tool/.heygen-profile/Default/Local Storage/leveldb/MANIFEST-000001
+2026/06/23-14:36:03.907 2b105 Recovering log #22
+2026/06/23-14:36:03.907 2b105 Level-0 table #24: started
+2026/06/23-14:36:03.911 2b105 Level-0 table #24: 240732 bytes OK
+2026/06/23-14:36:03.913 2b105 Delete type=0 #22

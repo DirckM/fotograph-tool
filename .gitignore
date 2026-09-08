@@ -45,3 +45,11 @@ logs/
 
 # training dataset (6.2GB of client photos — lives on the RunPod volume, not git)
 /Training Images/
+
+# Claude Code per-session worktrees.
+.claude/worktrees/
+
+# Experiment inputs. Source footage that goes INTO a workflow is not something
+# this repo produces, and a client's marketing video has no business in git.
+# Each experiment's README records what its input was and where it sits.
+experiments/*/input/
